@@ -1,0 +1,73 @@
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+*.ncb
+*.opt
+*.plg
+*.idb
+*.ipch/
+*.opensdf
+*.sdf
+*.cachefile
+*.dbmdl
+*.bak
+*.backup
+*.log
+
+# Build Folders
+bin/
+obj/
+Debug/
+Release/
+_x64/
+_x86/
+build/
+[Bb]uild/
+
+# Rider
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# NuGet
+*.nupkg
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# IIS Express
+/.vs/**/applicationhost.config
+/.vs/**/IISExpress/**/*
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userprefs
+*.perfs
+*.settings
+
+# Mono auto generated files
+mono_crash.*
+
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Generated source files
+*.g.cs
+*.g.i.cs
+*.Designer.cs
+*.designer.cs
