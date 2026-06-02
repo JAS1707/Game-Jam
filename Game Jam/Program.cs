@@ -4,10 +4,11 @@ using System.Numerics;
 
 const int W = 800, H = 600;
 
-var globalState = new GlobalState();
-var menu        = new MainMenu(globalState);
+var globalState  = new GlobalState();
+var menu         = new MainMenu(globalState);
 SlotMachineGame? slotGame = null;
-bool inMenu = true;
+BlackjackGame?   bjGame   = null;
+GameChoice       active   = GameChoice.None;
 
 Raylib.SetConfigFlags(ConfigFlags.ResizableWindow);
 Raylib.InitWindow(W, H, "Game Jam");
@@ -20,38 +21,49 @@ while (!Raylib.WindowShouldClose())
     int sw   = Raylib.GetScreenWidth();
     int sh   = Raylib.GetScreenHeight();
     float sc = Math.Min((float)sw / W, (float)sh / H);
-    int dw   = (int)(W * sc);
-    int dh   = (int)(H * sc);
-    int ox   = (sw - dw) / 2;
-    int oy   = (sh - dh) / 2;
+    int dw   = (int)(W * sc), dh = (int)(H * sc);
+    int ox   = (sw - dw) / 2,  oy = (sh - dh) / 2;
 
-    if (Raylib.IsKeyPressed(KeyboardKey.F11))
-        ToggleFullscreen(W, H);
+    if (Raylib.IsKeyPressed(KeyboardKey.F11)) ToggleFullscreen(W, H);
 
-    if (inMenu)
+    if (active == GameChoice.None)
     {
         menu.SetDrawParams(ox, oy, sc);
         menu.Update();
+
         if (menu.SelectedGame == GameChoice.Slots)
         {
             slotGame ??= new SlotMachineGame(globalState);
             slotGame.Reset();
             slotGame.SetDrawParams(ox, oy, sc);
-            inMenu = false;
+            active = GameChoice.Slots;
+        }
+        else if (menu.SelectedGame == GameChoice.Blackjack)
+        {
+            bjGame ??= new BlackjackGame(globalState);
+            bjGame.Reset();
+            bjGame.SetDrawParams(ox, oy, sc);
+            active = GameChoice.Blackjack;
         }
     }
-    else
+    else if (active == GameChoice.Slots)
     {
         slotGame!.SetDrawParams(ox, oy, sc);
         slotGame.Update();
-        if (slotGame.WantsToGoBack)
-            inMenu = true;
+        if (slotGame.WantsToGoBack) active = GameChoice.None;
+    }
+    else if (active == GameChoice.Blackjack)
+    {
+        bjGame!.SetDrawParams(ox, oy, sc);
+        bjGame.Update();
+        if (bjGame.WantsToGoBack) active = GameChoice.None;
     }
 
     Raylib.BeginTextureMode(canvas);
     Raylib.ClearBackground(new Color(18, 18, 35, 255));
-    if (inMenu) menu.Draw();
-    else        slotGame!.Draw();
+    if      (active == GameChoice.None)      menu.Draw();
+    else if (active == GameChoice.Slots)     slotGame!.Draw();
+    else if (active == GameChoice.Blackjack) bjGame!.Draw();
     Raylib.EndTextureMode();
 
     Raylib.BeginDrawing();

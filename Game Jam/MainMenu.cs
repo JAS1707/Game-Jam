@@ -28,7 +28,8 @@ public class MainMenu
         SelectedGame = GameChoice.None;
         if (!Raylib.IsMouseButtonPressed(MouseButton.Left)) return;
         Vector2 m = CanvasMouse();
-        if (Hit(m, SlotsButtonRect())) SelectedGame = GameChoice.Slots;
+        if (Hit(m, SlotsButtonRect()))     SelectedGame = GameChoice.Slots;
+        if (Hit(m, BlackjackButtonRect())) SelectedGame = GameChoice.Blackjack;
     }
 
     public void Draw()
@@ -47,6 +48,7 @@ public class MainMenu
         Raylib.DrawText(sub, (W - cw) / 2, 248, 22, new Color(160, 160, 160, 255));
 
         DrawSlotsButton();
+        DrawBlackjackButton();
 
         const string hint = "F11: volledig scherm";
         int hw = Raylib.MeasureText(hint, 12);
@@ -54,26 +56,31 @@ public class MainMenu
     }
 
     private void DrawSlotsButton()
-    {
-        Rectangle rect = SlotsButtonRect();
-        Vector2 m      = CanvasMouse();
-        bool hover     = Hit(m, rect);
+        => DrawMenuButton(SlotsButtonRect(), "🎰  SLOT MACHINE", new Color(30, 100, 30, 255));
 
-        Color bg = hover ? Color.Yellow : new Color(30, 100, 30, 255);
+    private void DrawBlackjackButton()
+        => DrawMenuButton(BlackjackButtonRect(), "♠  BLACKJACK", new Color(80, 20, 20, 255));
+
+    private void DrawMenuButton(Rectangle rect, string label, Color bgColor)
+    {
+        Vector2 m  = CanvasMouse();
+        bool hover = Hit(m, rect);
+
+        Color bg = hover ? Color.Yellow : bgColor;
         Color fg = hover ? Color.Black  : Color.White;
 
         Raylib.DrawRectangleRec(rect, bg);
         Raylib.DrawRectangleLinesEx(rect, 2, Color.White);
 
-        const string label = "SLOT MACHINE";
-        int lw = Raylib.MeasureText(label, 26);
+        int lw = Raylib.MeasureText(label, 24);
         Raylib.DrawText(label,
             (int)(rect.X + (rect.Width  - lw) / 2),
-            (int)(rect.Y + (rect.Height - 26) / 2),
-            26, fg);
+            (int)(rect.Y + (rect.Height - 24) / 2),
+            24, fg);
     }
 
-    private static Rectangle SlotsButtonRect() => new Rectangle((W - 300) / 2f, 300, 300, 70);
+    private static Rectangle SlotsButtonRect()     => new Rectangle((W - 300) / 2f, 295, 300, 65);
+    private static Rectangle BlackjackButtonRect() => new Rectangle((W - 300) / 2f, 375, 300, 65);
 
     private Vector2 CanvasMouse()
     {
