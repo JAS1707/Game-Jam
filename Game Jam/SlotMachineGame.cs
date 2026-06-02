@@ -6,13 +6,17 @@ namespace Game_Jam;
 
 public class SlotMachineGame
 {
+    // ── Pas hier het aantal wielen aan (2 t/m 7) ─────────────────────────────
+    private const int SlotCount = 5;
+    // ─────────────────────────────────────────────────────────────────────────
+
     private const int W = 800, H = 600;
     private const int StartingBalance = 100;
     private const int MinBet = 1;
-    private const float SlotH = 65f;          // hoogte van één symboolslot in pixels
-    private const float SpinSpeed = 25f;       // symbolen per seconde op volle snelheid
-    private const float BrakeDuration = 0.5f;  // seconden om te vertragen
-    private const float MinBrakeTravel = 1.5f; // minimale symbolen bij afremmen
+    private const float SlotH = 65f;
+    private const float SpinSpeed = 25f;
+    private const float BrakeDuration = 0.5f;
+    private const float MinBrakeTravel = 1.5f;
 
     // Spelerstatus
     private int _balance = StartingBalance;
@@ -25,69 +29,46 @@ public class SlotMachineGame
     private StatusKind _statusKind = StatusKind.Neutral;
     private bool _gameOver;
 
-    // Aantal slots naast elkaar (instelbaar via +/- knoppen)
-    private int _slotCount = 6;
-
-    // Reel scroll-animatie (één continue positie per wiel in symbool-index-eenheden)
-    private float[] _reelPos;
-    private bool[]  _wheelLanded;
-    private bool[]  _braking;
-    private float[] _brakeStartPos;
-    private float[] _brakeDist;
-    private double[] _brakeTime;
+    // Reel scroll-animatie
+    private readonly float[]  _reelPos       = new float[SlotCount];
+    private bool[]            _wheelLanded   = new bool[SlotCount];
+    private bool[]            _braking       = new bool[SlotCount];
+    private readonly float[]  _brakeStartPos = new float[SlotCount];
+    private readonly float[]  _brakeDist     = new float[SlotCount];
+    private readonly double[] _brakeTime     = new double[SlotCount];
 
     private bool _spinning;
     private bool _rigged;
     private double _spinStart;
     private double _lastTime;
 
-    private SlotMachine _machine;
+    private readonly SlotMachine _machine = new(SlotCount);
 
     // Emoji-lettertype
     private Font _emojiFont;
     private bool _fontLoaded;
 
+    // Schaal voor volledig scherm (render texture → scherm)
+    private int   _drawOffsetX;
+    private int   _drawOffsetY;
+    private float _drawScale = 1f;
+
     private enum StatusKind { Neutral, Win, Lose }
-
-    public SlotMachineGame()
-    {
-        _machine = new SlotMachine(_slotCount);
-        InitArrays();
-    }
-
-    private void InitArrays()
-    {
-        _reelPos       = new float[_slotCount];
-        _wheelLanded   = new bool[_slotCount];
-        _braking       = new bool[_slotCount];
-        _brakeStartPos = new float[_slotCount];
-        _brakeDist     = new float[_slotCount];
-        _brakeTime     = new double[_slotCount];
-    }
-
-    private void SetSlotCount(int n)
-    {
-        n = Math.Clamp(n, 2, 7);
-        if (n == _slotCount) return;
-        _slotCount = n;
-        _machine = new SlotMachine(n);
-        InitArrays();
-        var init = _machine.CurrentSymbols;
-        for (int i = 0; i < _slotCount; i++)
-            _reelPos[i] = Array.IndexOf(Symbol.All, init[i]);
-    }
 
     // ── Run ───────────────────────────────────────────────────────────────────
 
     public void Run()
     {
+        Raylib.SetConfigFlags(ConfigFlags.ResizableWindow);
         Raylib.InitWindow(W, H, "Slot Machine");
         Raylib.SetTargetFPS(60);
-
         TryLoadEmojiFont();
 
+        // Vaste canvas van W×H — schaalt automatisch naar elk schermformaat
+        RenderTexture2D canvas = Raylib.LoadRenderTexture(W, H);
+
         var init = _machine.CurrentSymbols;
-        for (int i = 0; i < _slotCount; i++)
+        for (int i = 0; i < SlotCount; i++)
             _reelPos[i] = Array.IndexOf(Symbol.All, init[i]);
 
         _lastTime = Raylib.GetTime();
@@ -95,12 +76,34 @@ public class SlotMachineGame
         while (!Raylib.WindowShouldClose())
         {
             Update();
-            Raylib.BeginDrawing();
+
+            // Teken alle spelelementen op de canvas (vaste resolutie)
+            Raylib.BeginTextureMode(canvas);
             Raylib.ClearBackground(new Color(18, 18, 35, 255));
             Draw();
+            Raylib.EndTextureMode();
+
+            // Schaal canvas naar het actuele scherm met letterboxing
+            int sw    = Raylib.GetScreenWidth();
+            int sh    = Raylib.GetScreenHeight();
+            float sc  = Math.Min((float)sw / W, (float)sh / H);
+            int dw    = (int)(W * sc);
+            int dh    = (int)(H * sc);
+            _drawOffsetX = (sw - dw) / 2;
+            _drawOffsetY = (sh - dh) / 2;
+            _drawScale   = sc;
+
+            Raylib.BeginDrawing();
+            Raylib.ClearBackground(Color.Black);
+            Raylib.DrawTexturePro(
+                canvas.Texture,
+                new Rectangle(0, 0, W, -H),                               // -H: flip Y (OpenGL convention)
+                new Rectangle(_drawOffsetX, _drawOffsetY, dw, dh),
+                Vector2.Zero, 0f, Color.White);
             Raylib.EndDrawing();
         }
 
+        Raylib.UnloadRenderTexture(canvas);
         if (_fontLoaded) Raylib.UnloadFont(_emojiFont);
         Raylib.CloseWindow();
     }
@@ -114,13 +117,24 @@ public class SlotMachineGame
         _fontLoaded = _emojiFont.GlyphCount > 0;
     }
 
+    // Muispositie omgezet naar canvas-coördinaten (ongeacht schaalgrootte)
+    private Vector2 CanvasMouse()
+    {
+        Vector2 m = Raylib.GetMousePosition();
+        return new Vector2((m.X - _drawOffsetX) / _drawScale,
+                           (m.Y - _drawOffsetY) / _drawScale);
+    }
+
     // ── Update ────────────────────────────────────────────────────────────────
 
     private void Update()
     {
         double now = Raylib.GetTime();
-        float dt = (float)(now - _lastTime);
-        _lastTime = now;
+        float dt   = (float)(now - _lastTime);
+        _lastTime  = now;
+
+        if (Raylib.IsKeyPressed(KeyboardKey.F11))
+            ToggleFullscreenWindow();
 
         HandleBetInput();
         HandleAnimation(now, dt);
@@ -151,30 +165,26 @@ public class SlotMachineGame
     {
         if (!_spinning) return;
 
-        double elapsed = now - _spinStart;
-        double[] stopTimes = new double[_slotCount];
-        for (int i = 0; i < _slotCount; i++)
+        double elapsed     = now - _spinStart;
+        double[] stopTimes = new double[SlotCount];
+        for (int i = 0; i < SlotCount; i++)
             stopTimes[i] = 1.4 + i * 0.5;
 
-        for (int i = 0; i < _slotCount; i++)
+        for (int i = 0; i < SlotCount; i++)
         {
             if (_wheelLanded[i]) continue;
 
             if (_braking[i])
             {
                 // Cubic ease-out: snel starten, langzaam stoppen op exact doelsymbool
-                float t = Math.Min((float)((now - _brakeTime[i]) / BrakeDuration), 1f);
+                float t     = Math.Min((float)((now - _brakeTime[i]) / BrakeDuration), 1f);
                 float eased = 1f - (float)Math.Pow(1.0 - t, 3);
                 _reelPos[i] = _brakeStartPos[i] + _brakeDist[i] * eased;
 
                 if (t >= 1f)
                 {
                     _wheelLanded[i] = true;
-                    if (_wheelLanded.All(l => l))
-                    {
-                        _spinning = false;
-                        FinishSpin();
-                    }
+                    if (_wheelLanded.All(l => l)) { _spinning = false; FinishSpin(); }
                 }
             }
             else if (elapsed >= stopTimes[i])
@@ -183,10 +193,9 @@ public class SlotMachineGame
             }
             else
             {
-                // Vrij draaien: aanloop + volle snelheid
-                float speed = elapsed < 0.4 ? (float)(elapsed / 0.4 * SpinSpeed) : SpinSpeed;
+                float speed  = elapsed < 0.4 ? (float)(elapsed / 0.4 * SpinSpeed) : SpinSpeed;
                 _reelPos[i] += speed * dt;
-                float len = Symbol.All.Length;
+                float len    = Symbol.All.Length;
                 while (_reelPos[i] >= len) _reelPos[i] -= len;
             }
         }
@@ -194,15 +203,15 @@ public class SlotMachineGame
 
     private void StartBraking(int i, double now)
     {
-        int targetIdx = Array.IndexOf(Symbol.All, _finalSymbols![i]);
-        float remaining = targetIdx - _reelPos[i];
+        int targetIdx    = Array.IndexOf(Symbol.All, _finalSymbols![i]);
+        float remaining  = targetIdx - _reelPos[i];
         if (remaining < 0) remaining += Symbol.All.Length;
         if (remaining < MinBrakeTravel) remaining += Symbol.All.Length;
 
-        _braking[i] = true;
+        _braking[i]       = true;
         _brakeStartPos[i] = _reelPos[i];
-        _brakeDist[i] = remaining;
-        _brakeTime[i] = now;
+        _brakeDist[i]     = remaining;
+        _brakeTime[i]     = now;
     }
 
     private void HandleSpaceCheat()
@@ -217,17 +226,14 @@ public class SlotMachineGame
     private void HandleClicks()
     {
         if (!Raylib.IsMouseButtonPressed(MouseButton.Left)) return;
-        Vector2 m = Raylib.GetMousePosition();
+        Vector2 m = CanvasMouse();
 
         _betFocused = Hit(m, BetFieldRect());
 
-        if (!_spinning && !_gameOver && Hit(m, SpinButtonRect())) TrySpin();
+        if (!_spinning && !_gameOver && Hit(m, SpinButtonRect()))  TrySpin();
         if (!_spinning && !_gameOver && Hit(m, AllInButtonRect())) AllIn();
-        if (_spinning && Hit(m, StopButtonRect()))                ForceStop();
-        if (_gameOver && Hit(m, RestartButtonRect()))             Restart();
-
-        if (!_spinning && !_gameOver && _slotCount > 2 && Hit(m, SlotMinusRect())) SetSlotCount(_slotCount - 1);
-        if (!_spinning && !_gameOver && _slotCount < 7 && Hit(m, SlotPlusRect()))  SetSlotCount(_slotCount + 1);
+        if (_spinning  && Hit(m, StopButtonRect()))                ForceStop();
+        if (_gameOver  && Hit(m, RestartButtonRect()))             Restart();
     }
 
     // ── Spellogica ────────────────────────────────────────────────────────────
@@ -247,31 +253,28 @@ public class SlotMachineGame
         _pendingPayout = _rigged
             ? _machine.SpinRiggedAndCalculate(bet)
             : _machine.SpinAndCalculate(bet);
-        _rigged        = false;
-        _finalSymbols  = _machine.CurrentSymbols;
-        _spinning      = true;
-        _spinStart     = Raylib.GetTime();
-        _wheelLanded   = new bool[_slotCount];
-        _braking       = new bool[_slotCount];
+        _rigged       = false;
+        _finalSymbols = _machine.CurrentSymbols;
+        _spinning     = true;
+        _spinStart    = Raylib.GetTime();
+        _wheelLanded  = new bool[SlotCount];
+        _braking      = new bool[SlotCount];
 
         SetStatus("Draaien...", StatusKind.Neutral);
     }
 
-    private void AllIn()
-    {
-        _betInput = _balance.ToString();
-    }
+    private void AllIn() => _betInput = _balance.ToString();
 
     private void ForceStop()
     {
         double now = Raylib.GetTime();
-        for (int i = 0; i < _slotCount; i++)
+        for (int i = 0; i < SlotCount; i++)
             if (!_wheelLanded[i] && !_braking[i]) StartBraking(i, now);
 
-        for (int i = 0; i < _slotCount; i++)
+        for (int i = 0; i < SlotCount; i++)
             if (!_wheelLanded[i])
             {
-                _reelPos[i] = _brakeStartPos[i] + _brakeDist[i];
+                _reelPos[i]     = _brakeStartPos[i] + _brakeDist[i];
                 _wheelLanded[i] = true;
             }
 
@@ -300,9 +303,17 @@ public class SlotMachineGame
         string sign = profit >= 0 ? $"+{profit}" : $"{profit}";
 
         bool jackpot = _finalSymbols!.All(s => s == _finalSymbols[0]);
-        string tag   = jackpot
-            ? $"JACKPOT!  Alle {_slotCount}x hetzelfde!"
-            : $"Kleine win!  {_slotCount - 1}x hetzelfde.";
+        string tag;
+        if (jackpot)
+        {
+            int mult = _currentBet > 0 ? _pendingPayout / _currentBet : 0;
+            tag = $"JACKPOT!  Alle {SlotCount}x hetzelfde!  (x{mult})";
+        }
+        else
+        {
+            int mult = _currentBet > 0 ? _pendingPayout / _currentBet : 0;
+            tag = $"Kleine win!  {SlotCount - 1}x hetzelfde.  (x{mult})";
+        }
 
         SetStatus($"{tag}  Uitbetaling: {_pendingPayout} ({sign})", StatusKind.Win);
     }
@@ -313,10 +324,11 @@ public class SlotMachineGame
         _betInput    = "10";
         _gameOver    = false;
         _spinning    = false;
-        InitArrays();
+        _wheelLanded = new bool[SlotCount];
+        _braking     = new bool[SlotCount];
 
         var init = _machine.CurrentSymbols;
-        for (int i = 0; i < _slotCount; i++)
+        for (int i = 0; i < SlotCount; i++)
             _reelPos[i] = Array.IndexOf(Symbol.All, init[i]);
 
         SetStatus("Welkom terug! Druk op DRAAIEN.", StatusKind.Neutral);
@@ -334,10 +346,11 @@ public class SlotMachineGame
         DrawPayTable();
         DrawButtons();
         DrawStatus();
+        DrawHint();
         if (_gameOver) DrawGameOverOverlay();
     }
 
-    private void DrawTitle()
+    private static void DrawTitle()
     {
         const string title = "SLOT  MACHINE";
         int tw = Raylib.MeasureText(title, 52);
@@ -348,74 +361,50 @@ public class SlotMachineGame
     private void DrawScoreBar()
     {
         Raylib.DrawText($"Saldo:  {_balance} munten", 50, 94, 22, Color.White);
-        DrawSlotCountControls();
         Raylib.DrawText("Inzet:", W - 230, 98, 20, new Color(180, 180, 180, 255));
         DrawTextBox(BetFieldRect(), _betInput, _betFocused);
     }
 
-    private void DrawSlotCountControls()
-    {
-        Raylib.DrawText("Wielen:", 300, 98, 20, new Color(180, 180, 180, 255));
-        bool canChange = !_spinning && !_gameOver;
-        DrawButton(SlotMinusRect(), "-", canChange && _slotCount > 2, new Color(60, 30, 80, 255));
-
-        var countRect = new Rectangle(423f, 89f, 32f, 36f);
-        Raylib.DrawRectangleRec(countRect, new Color(28, 28, 50, 255));
-        Raylib.DrawRectangleLinesEx(countRect, 2, Color.Gray);
-        string cnt = _slotCount.ToString();
-        int cw = Raylib.MeasureText(cnt, 20);
-        Raylib.DrawText(cnt, (int)(countRect.X + (countRect.Width - cw) / 2), (int)(countRect.Y + 8), 20, Color.White);
-
-        DrawButton(SlotPlusRect(), "+", canChange && _slotCount < 7, new Color(60, 30, 80, 255));
-    }
-
     private void DrawWheels()
     {
-        for (int i = 0; i < _slotCount; i++)
+        for (int i = 0; i < SlotCount; i++)
             DrawWheel(i);
     }
 
     private void DrawWheel(int index)
     {
-        Rectangle rect = WheelRect(index);
+        Rectangle rect     = WheelRect(index);
         bool wheelSpinning = _spinning && !_wheelLanded[index];
-        Color border = wheelSpinning ? new Color(130, 130, 130, 255) : Color.Gold;
+        Color border       = wheelSpinning ? new Color(130, 130, 130, 255) : Color.Gold;
 
         Raylib.DrawRectangleRec(rect, new Color(10, 10, 25, 255));
-
-        // Scrollende symbolen, bijgesneden tot het wielgebied
         Raylib.BeginScissorMode((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height);
 
-        int symCount = Symbol.All.Length;
-        float pos    = _reelPos[index];
-        int baseIdx  = (int)pos;
-        float frac   = pos - baseIdx;                  // 0..1, voortgang naar volgend symbool
+        int symCount  = Symbol.All.Length;
+        float pos     = _reelPos[index];
+        int baseIdx   = (int)pos;
+        float frac    = pos - baseIdx;
         float centerY = rect.Y + rect.Height / 2f;
 
-        // Teken genoeg symbolen om het wiel te vullen (inclusief overloop)
         for (int d = -2; d <= 3; d++)
         {
             int symIdx  = ((baseIdx + d) % symCount + symCount) % symCount;
             Symbol sym  = Symbol.All[symIdx];
-            float symCY = centerY + (d - frac) * SlotH; // beweegt omhoog naarmate frac toeneemt
+            float symCY = centerY + (d - frac) * SlotH;
             DrawSymbolAt(sym, rect.X, symCY, rect.Width, wheelSpinning);
         }
 
         Raylib.EndScissorMode();
 
-        // Winlijn highlight (middelste slot)
         int wy = (int)(rect.Y + rect.Height / 2f - SlotH / 2f);
         Raylib.DrawRectangle((int)rect.X, wy, (int)rect.Width, (int)SlotH, new Color(255, 255, 255, 12));
-        Raylib.DrawLine((int)rect.X, wy,             (int)(rect.X + rect.Width), wy,             new Color(255, 215, 0, 120));
-        Raylib.DrawLine((int)rect.X, wy + (int)SlotH,(int)(rect.X + rect.Width), wy + (int)SlotH,new Color(255, 215, 0, 120));
+        Raylib.DrawLine((int)rect.X, wy,              (int)(rect.X + rect.Width), wy,              new Color(255, 215, 0, 120));
+        Raylib.DrawLine((int)rect.X, wy + (int)SlotH, (int)(rect.X + rect.Width), wy + (int)SlotH, new Color(255, 215, 0, 120));
 
-        // Fade boven en onder zodat symbolen vloeiend verdwijnen
         int fadeH = 45;
-        Raylib.DrawRectangleGradientV(
-            (int)rect.X, (int)rect.Y, (int)rect.Width, fadeH,
+        Raylib.DrawRectangleGradientV((int)rect.X, (int)rect.Y, (int)rect.Width, fadeH,
             new Color(10, 10, 25, 230), new Color(10, 10, 25, 0));
-        Raylib.DrawRectangleGradientV(
-            (int)rect.X, (int)(rect.Y + rect.Height - fadeH), (int)rect.Width, fadeH,
+        Raylib.DrawRectangleGradientV((int)rect.X, (int)(rect.Y + rect.Height - fadeH), (int)rect.Width, fadeH,
             new Color(10, 10, 25, 0), new Color(10, 10, 25, 230));
 
         Raylib.DrawRectangleLinesEx(rect, 3, border);
@@ -432,16 +421,16 @@ public class SlotMachineGame
 
         if (_fontLoaded)
         {
-            float fs = Math.Min(46f, width * 0.45f);
+            float fs     = Math.Min(46f, width * 0.45f);
             Vector2 size = Raylib.MeasureTextEx(_emojiFont, sym.Glyph, fs, 1f);
-            var pos = new Vector2(x + (width - size.X) / 2f, centerY - size.Y / 2f);
+            var pos      = new Vector2(x + (width - size.X) / 2f, centerY - size.Y / 2f);
             Raylib.DrawTextEx(_emojiFont, sym.Glyph, pos, fs, 1f, c);
         }
         else
         {
-            int fs = (int)Math.Min(36f, width * 0.38f);
+            int fs     = (int)Math.Min(36f, width * 0.38f);
             string txt = SymbolFallbackText(sym);
-            int tw = Raylib.MeasureText(txt, fs);
+            int tw     = Raylib.MeasureText(txt, fs);
             Raylib.DrawText(txt, (int)(x + (width - tw) / 2), (int)(centerY - fs / 2f), fs, c);
         }
     }
@@ -454,15 +443,18 @@ public class SlotMachineGame
 
         foreach (var sym in Symbol.All)
         {
-            Color c = SymbolColor(sym);
+            Color c     = SymbolColor(sym);
+            int mult    = SlotMachine.JackpotMultiplier(sym, SlotCount);
+            int swMult  = SlotMachine.SmallWinMultiplier(sym, SlotCount);
+
             if (_fontLoaded)
             {
                 Raylib.DrawTextEx(_emojiFont, sym.Glyph, new Vector2(tx, ty), 20f, 1f, c);
-                Raylib.DrawText($"  3x = x{sym.Multiplier}  |  2x = x1.5", tx + 26, ty + 2, 16, c);
+                Raylib.DrawText($"  {SlotCount}x=x{mult}  {SlotCount - 1}x=x{swMult}", tx + 26, ty + 2, 15, c);
             }
             else
             {
-                Raylib.DrawText($"{SymbolFallbackText(sym),-5}  3x = x{sym.Multiplier}  |  2x = x1.5", tx, ty, 16, c);
+                Raylib.DrawText($"{SymbolFallbackText(sym),-5} {SlotCount}x=x{mult} {SlotCount - 1}x=x{swMult}", tx, ty, 15, c);
             }
             ty += 22;
         }
@@ -492,6 +484,13 @@ public class SlotMachineGame
         Raylib.DrawText(_statusMsg, Math.Max(30, (W - tw) / 2), 550, fs, c);
     }
 
+    private static void DrawHint()
+    {
+        const string hint = "F11: volledig scherm";
+        int hw = Raylib.MeasureText(hint, 12);
+        Raylib.DrawText(hint, W - hw - 8, H - 18, 12, new Color(55, 55, 55, 255));
+    }
+
     private void DrawGameOverOverlay()
     {
         Raylib.DrawRectangle(0, 0, W, H, new Color(0, 0, 0, 170));
@@ -517,14 +516,12 @@ public class SlotMachineGame
 
     private void DrawButton(Rectangle rect, string label, bool enabled, Color normalBg)
     {
-        Vector2 m  = Raylib.GetMousePosition();
+        Vector2 m  = CanvasMouse();
         bool hover = enabled && Hit(m, rect);
 
-        Color bg = !enabled ? new Color(40, 40, 50, 255)
-                 : hover    ? Color.Yellow : normalBg;
-        Color fg = !enabled ? Color.DarkGray
-                 : hover    ? Color.Black  : Color.White;
-        Color border = enabled ? Color.White : new Color(60, 60, 60, 255);
+        Color bg     = !enabled ? new Color(40, 40, 50, 255)  : hover ? Color.Yellow : normalBg;
+        Color fg     = !enabled ? Color.DarkGray               : hover ? Color.Black  : Color.White;
+        Color border = enabled  ? Color.White : new Color(60, 60, 60, 255);
 
         Raylib.DrawRectangleRec(rect, bg);
         Raylib.DrawRectangleLinesEx(rect, 2, border);
@@ -538,14 +535,14 @@ public class SlotMachineGame
 
     // ── Rechthoeken ───────────────────────────────────────────────────────────
 
-    // Wielgrootte schaalt automatisch mee met het aantal slots
-    private Rectangle WheelRect(int i)
+    // Wielgrootte schaalt automatisch op basis van SlotCount
+    private static Rectangle WheelRect(int i)
     {
         const float maxWheelW = 175f, gap = 12f;
-        float totalGap = (_slotCount - 1) * gap;
-        float wheelW = Math.Min(maxWheelW, (W - 80f - totalGap) / _slotCount);
-        float totalW = _slotCount * wheelW + totalGap;
-        float startX = (W - totalW) / 2f;
+        float totalGap = (SlotCount - 1) * gap;
+        float wheelW   = Math.Min(maxWheelW, (W - 80f - totalGap) / SlotCount);
+        float totalW   = SlotCount * wheelW + totalGap;
+        float startX   = (W - totalW) / 2f;
         return new Rectangle(startX + i * (wheelW + gap), 128f, wheelW, 195f);
     }
 
@@ -554,8 +551,6 @@ public class SlotMachineGame
     private static Rectangle StopButtonRect()    => new Rectangle(660, 337, 120, 46);
     private static Rectangle RestartButtonRect() => new Rectangle((W - 200) / 2f, H / 2f + 50, 200, 50);
     private static Rectangle BetFieldRect()      => new Rectangle(W - 185f, 89f, 135f, 36f);
-    private static Rectangle SlotMinusRect()     => new Rectangle(395f, 89f, 26f, 36f);
-    private static Rectangle SlotPlusRect()      => new Rectangle(457f, 89f, 26f, 36f);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -581,4 +576,20 @@ public class SlotMachineGame
 
     private static bool Hit(Vector2 m, Rectangle r) =>
         Raylib.CheckCollisionPointRec(m, r);
+
+    // Op Windows moet de venstergrootte naar de monitorresolutie vóór ToggleFullscreen werkt
+    private static void ToggleFullscreenWindow()
+    {
+        if (Raylib.IsWindowFullscreen())
+        {
+            Raylib.ToggleFullscreen();
+            Raylib.SetWindowSize(W, H);
+        }
+        else
+        {
+            int mon = Raylib.GetCurrentMonitor();
+            Raylib.SetWindowSize(Raylib.GetMonitorWidth(mon), Raylib.GetMonitorHeight(mon));
+            Raylib.ToggleFullscreen();
+        }
+    }
 }
