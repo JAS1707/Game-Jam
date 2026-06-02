@@ -10,7 +10,7 @@ public class SlotMachineGame
     private const int StartingBalance = 100;
     private const int MinBet = 1;
     private const float SlotH = 65f;          // hoogte van één symboolslot in pixels
-    private const float SpinSpeed = 16f;       // symbolen per seconde op volle snelheid
+    private const float SpinSpeed = 25f;       // symbolen per seconde op volle snelheid
     private const float BrakeDuration = 0.5f;  // seconden om te vertragen
     private const float MinBrakeTravel = 1.5f; // minimale symbolen bij afremmen
 
@@ -25,26 +25,57 @@ public class SlotMachineGame
     private StatusKind _statusKind = StatusKind.Neutral;
     private bool _gameOver;
 
+    // Aantal slots naast elkaar (instelbaar via +/- knoppen)
+    private int _slotCount = 6;
+
     // Reel scroll-animatie (één continue positie per wiel in symbool-index-eenheden)
-    private float[] _reelPos       = [0f, 0f, 0f];
-    private bool[]  _wheelLanded   = [false, false, false];
-    private bool[]  _braking       = [false, false, false];
-    private float[] _brakeStartPos = [0f, 0f, 0f];
-    private float[] _brakeDist     = [0f, 0f, 0f];
-    private double[] _brakeTime    = [0.0, 0.0, 0.0];
+    private float[] _reelPos;
+    private bool[]  _wheelLanded;
+    private bool[]  _braking;
+    private float[] _brakeStartPos;
+    private float[] _brakeDist;
+    private double[] _brakeTime;
 
     private bool _spinning;
     private bool _rigged;
     private double _spinStart;
     private double _lastTime;
 
-    private readonly SlotMachine _machine = new();
+    private SlotMachine _machine;
 
     // Emoji-lettertype
     private Font _emojiFont;
     private bool _fontLoaded;
 
     private enum StatusKind { Neutral, Win, Lose }
+
+    public SlotMachineGame()
+    {
+        _machine = new SlotMachine(_slotCount);
+        InitArrays();
+    }
+
+    private void InitArrays()
+    {
+        _reelPos       = new float[_slotCount];
+        _wheelLanded   = new bool[_slotCount];
+        _braking       = new bool[_slotCount];
+        _brakeStartPos = new float[_slotCount];
+        _brakeDist     = new float[_slotCount];
+        _brakeTime     = new double[_slotCount];
+    }
+
+    private void SetSlotCount(int n)
+    {
+        n = Math.Clamp(n, 2, 7);
+        if (n == _slotCount) return;
+        _slotCount = n;
+        _machine = new SlotMachine(n);
+        InitArrays();
+        var init = _machine.CurrentSymbols;
+        for (int i = 0; i < _slotCount; i++)
+            _reelPos[i] = Array.IndexOf(Symbol.All, init[i]);
+    }
 
     // ── Run ───────────────────────────────────────────────────────────────────
 
@@ -56,7 +87,7 @@ public class SlotMachineGame
         TryLoadEmojiFont();
 
         var init = _machine.CurrentSymbols;
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < _slotCount; i++)
             _reelPos[i] = Array.IndexOf(Symbol.All, init[i]);
 
         _lastTime = Raylib.GetTime();
@@ -121,9 +152,11 @@ public class SlotMachineGame
         if (!_spinning) return;
 
         double elapsed = now - _spinStart;
-        double[] stopTimes = [1.4, 1.9, 2.4];
+        double[] stopTimes = new double[_slotCount];
+        for (int i = 0; i < _slotCount; i++)
+            stopTimes[i] = 1.4 + i * 0.5;
 
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < _slotCount; i++)
         {
             if (_wheelLanded[i]) continue;
 
@@ -137,7 +170,7 @@ public class SlotMachineGame
                 if (t >= 1f)
                 {
                     _wheelLanded[i] = true;
-                    if (_wheelLanded[0] && _wheelLanded[1] && _wheelLanded[2])
+                    if (_wheelLanded.All(l => l))
                     {
                         _spinning = false;
                         FinishSpin();
@@ -192,6 +225,9 @@ public class SlotMachineGame
         if (!_spinning && !_gameOver && Hit(m, AllInButtonRect())) AllIn();
         if (_spinning && Hit(m, StopButtonRect()))                ForceStop();
         if (_gameOver && Hit(m, RestartButtonRect()))             Restart();
+
+        if (!_spinning && !_gameOver && _slotCount > 2 && Hit(m, SlotMinusRect())) SetSlotCount(_slotCount - 1);
+        if (!_spinning && !_gameOver && _slotCount < 7 && Hit(m, SlotPlusRect()))  SetSlotCount(_slotCount + 1);
     }
 
     // ── Spellogica ────────────────────────────────────────────────────────────
@@ -215,8 +251,8 @@ public class SlotMachineGame
         _finalSymbols  = _machine.CurrentSymbols;
         _spinning      = true;
         _spinStart     = Raylib.GetTime();
-        _wheelLanded   = [false, false, false];
-        _braking       = [false, false, false];
+        _wheelLanded   = new bool[_slotCount];
+        _braking       = new bool[_slotCount];
 
         SetStatus("Draaien...", StatusKind.Neutral);
     }
@@ -229,10 +265,10 @@ public class SlotMachineGame
     private void ForceStop()
     {
         double now = Raylib.GetTime();
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < _slotCount; i++)
             if (!_wheelLanded[i] && !_braking[i]) StartBraking(i, now);
 
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < _slotCount; i++)
             if (!_wheelLanded[i])
             {
                 _reelPos[i] = _brakeStartPos[i] + _brakeDist[i];
@@ -260,10 +296,14 @@ public class SlotMachineGame
             return;
         }
 
-        int profit   = _pendingPayout - _currentBet;
-        bool jackpot = _pendingPayout != (int)(_currentBet * 1.5);
-        string tag   = jackpot ? "JACKPOT!  3x hetzelfde!" : "Kleine win!  2x hetzelfde.";
-        string sign  = profit >= 0 ? $"+{profit}" : $"{profit}";
+        int profit  = _pendingPayout - _currentBet;
+        string sign = profit >= 0 ? $"+{profit}" : $"{profit}";
+
+        bool jackpot = _finalSymbols!.All(s => s == _finalSymbols[0]);
+        string tag   = jackpot
+            ? $"JACKPOT!  Alle {_slotCount}x hetzelfde!"
+            : $"Kleine win!  {_slotCount - 1}x hetzelfde.";
+
         SetStatus($"{tag}  Uitbetaling: {_pendingPayout} ({sign})", StatusKind.Win);
     }
 
@@ -273,11 +313,10 @@ public class SlotMachineGame
         _betInput    = "10";
         _gameOver    = false;
         _spinning    = false;
-        _wheelLanded = [false, false, false];
-        _braking     = [false, false, false];
+        InitArrays();
 
         var init = _machine.CurrentSymbols;
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < _slotCount; i++)
             _reelPos[i] = Array.IndexOf(Symbol.All, init[i]);
 
         SetStatus("Welkom terug! Druk op DRAAIEN.", StatusKind.Neutral);
@@ -309,13 +348,30 @@ public class SlotMachineGame
     private void DrawScoreBar()
     {
         Raylib.DrawText($"Saldo:  {_balance} munten", 50, 94, 22, Color.White);
+        DrawSlotCountControls();
         Raylib.DrawText("Inzet:", W - 230, 98, 20, new Color(180, 180, 180, 255));
         DrawTextBox(BetFieldRect(), _betInput, _betFocused);
     }
 
+    private void DrawSlotCountControls()
+    {
+        Raylib.DrawText("Wielen:", 300, 98, 20, new Color(180, 180, 180, 255));
+        bool canChange = !_spinning && !_gameOver;
+        DrawButton(SlotMinusRect(), "-", canChange && _slotCount > 2, new Color(60, 30, 80, 255));
+
+        var countRect = new Rectangle(423f, 89f, 32f, 36f);
+        Raylib.DrawRectangleRec(countRect, new Color(28, 28, 50, 255));
+        Raylib.DrawRectangleLinesEx(countRect, 2, Color.Gray);
+        string cnt = _slotCount.ToString();
+        int cw = Raylib.MeasureText(cnt, 20);
+        Raylib.DrawText(cnt, (int)(countRect.X + (countRect.Width - cw) / 2), (int)(countRect.Y + 8), 20, Color.White);
+
+        DrawButton(SlotPlusRect(), "+", canChange && _slotCount < 7, new Color(60, 30, 80, 255));
+    }
+
     private void DrawWheels()
     {
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < _slotCount; i++)
             DrawWheel(i);
     }
 
@@ -376,15 +432,15 @@ public class SlotMachineGame
 
         if (_fontLoaded)
         {
-            const float fs = 46f;
+            float fs = Math.Min(46f, width * 0.45f);
             Vector2 size = Raylib.MeasureTextEx(_emojiFont, sym.Glyph, fs, 1f);
             var pos = new Vector2(x + (width - size.X) / 2f, centerY - size.Y / 2f);
             Raylib.DrawTextEx(_emojiFont, sym.Glyph, pos, fs, 1f, c);
         }
         else
         {
+            int fs = (int)Math.Min(36f, width * 0.38f);
             string txt = SymbolFallbackText(sym);
-            int fs = 36;
             int tw = Raylib.MeasureText(txt, fs);
             Raylib.DrawText(txt, (int)(x + (width - tw) / 2), (int)(centerY - fs / 2f), fs, c);
         }
@@ -482,12 +538,15 @@ public class SlotMachineGame
 
     // ── Rechthoeken ───────────────────────────────────────────────────────────
 
-    // Wiel: y=128, hoogte=195 (3 slots × 65 px)
-    private static Rectangle WheelRect(int i)
+    // Wielgrootte schaalt automatisch mee met het aantal slots
+    private Rectangle WheelRect(int i)
     {
-        const float wheelW = 175f, wheelH = 195f, gap = 18f;
-        float startX = (W - 3f * wheelW - 2f * gap) / 2f;
-        return new Rectangle(startX + i * (wheelW + gap), 128f, wheelW, wheelH);
+        const float maxWheelW = 175f, gap = 12f;
+        float totalGap = (_slotCount - 1) * gap;
+        float wheelW = Math.Min(maxWheelW, (W - 80f - totalGap) / _slotCount);
+        float totalW = _slotCount * wheelW + totalGap;
+        float startX = (W - totalW) / 2f;
+        return new Rectangle(startX + i * (wheelW + gap), 128f, wheelW, 195f);
     }
 
     private static Rectangle SpinButtonRect()    => new Rectangle(390, 337, 140, 46);
@@ -495,6 +554,8 @@ public class SlotMachineGame
     private static Rectangle StopButtonRect()    => new Rectangle(660, 337, 120, 46);
     private static Rectangle RestartButtonRect() => new Rectangle((W - 200) / 2f, H / 2f + 50, 200, 50);
     private static Rectangle BetFieldRect()      => new Rectangle(W - 185f, 89f, 135f, 36f);
+    private static Rectangle SlotMinusRect()     => new Rectangle(395f, 89f, 26f, 36f);
+    private static Rectangle SlotPlusRect()      => new Rectangle(457f, 89f, 26f, 36f);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
