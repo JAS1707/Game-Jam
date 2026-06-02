@@ -253,7 +253,8 @@ public class BlackjackGame
             if (_state.Balance - CurrentBet >= v) _betChips.Add(v);
             return;
         }
-        if (Hit(m, ClearButtonRect()) && _betChips.Count > 0) { _betChips.Clear(); return; }
+        if (Hit(m, AllInButtonRect()))                         { AllIn();            return; }
+        if (Hit(m, ClearButtonRect()) && _betChips.Count > 0) { _betChips.Clear();  return; }
         if (Hit(m, TowerRect()) && _betChips.Count > 0)       { _betChips.RemoveAt(_betChips.Count - 1); return; }
         if (Hit(m, DealButtonRect()) && CurrentBet >= 1)       StartDeal();
     }
@@ -264,6 +265,17 @@ public class BlackjackGame
         if (Hit(m, StandButtonRect()))  { PlayerStand();  return; }
         if (Hit(m, DoubleButtonRect()) && CanDouble()) { PlayerDouble(); return; }
         if (Hit(m, SplitButtonRect())  && CanSplit())  { BeginSplit();   return; }
+    }
+
+    private void AllIn()
+    {
+        _betChips.Clear();
+        int rem = _state.Balance;
+        for (int i = ChipValues.Length - 1; i >= 0; i--)
+        {
+            int v = ChipValues[i];
+            while (rem >= v) { _betChips.Add(v); rem -= v; }
+        }
     }
 
     // ── Spel-logica ───────────────────────────────────────────────────────────
@@ -755,8 +767,10 @@ public class BlackjackGame
         switch (_bjState)
         {
             case BjState.Betting:
-                bool canDeal = CurrentBet >= 1;
-                DrawButton(DealButtonRect(), "DEAL", canDeal, Color.DarkGreen);
+                bool canDeal  = CurrentBet >= 1;
+                bool canAllIn = _state.Balance > 0;
+                DrawButton(DealButtonRect(),  "DEAL",   canDeal,  Color.DarkGreen);
+                DrawButton(AllInButtonRect(), "ALL IN", canAllIn, new Color(140, 20, 20, 255));
                 break;
 
             case BjState.PlayerTurn:
@@ -922,12 +936,13 @@ public class BlackjackGame
 
     // ── Rechthoeken ───────────────────────────────────────────────────────────
 
-    private static Rectangle MenuButtonRect()  => new Rectangle(10f,  10f, 90f, 30f);
-    private static Rectangle DealButtonRect()  => new Rectangle(340f, 460f, 120f, 36f);
-    private static Rectangle HitButtonRect()   => new Rectangle(180f, 460f, 90f, 36f);
-    private static Rectangle StandButtonRect() => new Rectangle(280f, 460f, 90f, 36f);
-    private static Rectangle DoubleButtonRect()=> new Rectangle(380f, 460f, 100f, 36f);
-    private static Rectangle SplitButtonRect() => new Rectangle(490f, 460f, 90f, 36f);
+    private static Rectangle MenuButtonRect()  => new Rectangle(10f,  10f,  90f, 30f);
+    private static Rectangle DealButtonRect()  => new Rectangle(310f, 460f, 110f, 36f);
+    private static Rectangle AllInButtonRect() => new Rectangle(428f, 460f,  90f, 36f);
+    private static Rectangle HitButtonRect()   => new Rectangle(155f, 460f,  85f, 36f);
+    private static Rectangle StandButtonRect() => new Rectangle(248f, 460f,  85f, 36f);
+    private static Rectangle DoubleButtonRect()=> new Rectangle(341f, 460f,  95f, 36f);
+    private static Rectangle SplitButtonRect() => new Rectangle(444f, 460f,  85f, 36f);
     private static Rectangle ClearButtonRect() => new Rectangle(620f, 460f, 100f, 36f);
     private static Rectangle TowerRect()       => new Rectangle(44f, 378f, 50f, 82f);
 }

@@ -229,8 +229,9 @@ public class SlotMachineGame
 
         if (!_spinning && !_gameOver)
         {
-            if (Hit(m, SpinButtonRect()) && CurrentBet >= MinBet) { TrySpin(); return; }
-            if (Hit(m, ClearButtonRect()) && _betChips.Count > 0) { _betChips.Clear(); return; }
+            if (Hit(m, SpinButtonRect()) && CurrentBet >= MinBet)  { TrySpin();  return; }
+            if (Hit(m, AllInButtonRect()))                          { AllIn();    return; }
+            if (Hit(m, ClearButtonRect()) && _betChips.Count > 0)  { _betChips.Clear(); return; }
 
             // Klik op de toren verwijdert de bovenste chip
             if (Hit(m, TowerRect()) && _betChips.Count > 0)
@@ -279,6 +280,17 @@ public class SlotMachineGame
         _braking      = new bool[SlotCount];
 
         SetStatus("Draaien...", StatusKind.Neutral);
+    }
+
+    private void AllIn()
+    {
+        _betChips.Clear();
+        int rem = _state.Balance;
+        for (int i = ChipValues.Length - 1; i >= 0; i--)
+        {
+            int v = ChipValues[i];
+            while (rem >= v) { _betChips.Add(v); rem -= v; }
+        }
     }
 
     private void ForceStop()
@@ -651,10 +663,12 @@ public class SlotMachineGame
         bool canSpin  = !_spinning && !_gameOver && CurrentBet >= MinBet;
         bool canClear = !_spinning && !_gameOver && _betChips.Count > 0;
 
-        DrawButton(SpinButtonRect(),  "DRAAIEN", canSpin,   Color.DarkGreen);
-        DrawButton(StopButtonRect(),  "STOP",    _spinning, Color.DarkGray);
-        DrawButton(ClearButtonRect(), "WISSEN",  canClear,  new Color(110, 50, 15, 255));
-        DrawButton(MenuButtonRect(),  "← MENU",  !_spinning, new Color(50, 50, 90, 255));
+        bool canAllIn = !_spinning && !_gameOver && _state.Balance > 0;
+        DrawButton(SpinButtonRect(),  "DRAAIEN",  canSpin,   Color.DarkGreen);
+        DrawButton(StopButtonRect(),  "STOP",     _spinning, Color.DarkGray);
+        DrawButton(AllInButtonRect(), "ALL IN",   canAllIn,  new Color(140, 20, 20, 255));
+        DrawButton(ClearButtonRect(), "WISSEN",   canClear,  new Color(110, 50, 15, 255));
+        DrawButton(MenuButtonRect(),  "← MENU",   !_spinning, new Color(50, 50, 90, 255));
 
         if (_gameOver)
             DrawButton(RestartButtonRect(), "OPNIEUW SPELEN", true, Color.DarkGreen);
@@ -726,9 +740,10 @@ public class SlotMachineGame
         return new Rectangle(startX + i * (wheelW + gap), 128f, wheelW, 195f);
     }
 
-    private static Rectangle SpinButtonRect()    => new Rectangle(270f, 510f, 130f, 34f);
-    private static Rectangle StopButtonRect()    => new Rectangle(410f, 510f, 100f, 34f);
-    private static Rectangle ClearButtonRect()   => new Rectangle(520f, 510f, 120f, 34f);
+    private static Rectangle SpinButtonRect()    => new Rectangle(270f, 510f, 120f, 34f);
+    private static Rectangle StopButtonRect()    => new Rectangle(398f, 510f,  90f, 34f);
+    private static Rectangle AllInButtonRect()   => new Rectangle(496f, 510f,  90f, 34f);
+    private static Rectangle ClearButtonRect()   => new Rectangle(594f, 510f, 100f, 34f);
     private static Rectangle RestartButtonRect() => new Rectangle((W - 200) / 2f, H / 2f + 50, 200, 50);
     private static Rectangle MenuButtonRect()    => new Rectangle(10f, 10f, 90f, 36f);
     private static Rectangle TowerRect()         => new Rectangle(272f, 338f, 66f, 160f);
