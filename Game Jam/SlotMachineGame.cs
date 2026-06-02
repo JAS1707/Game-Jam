@@ -39,6 +39,7 @@ public class SlotMachineGame
 
     private bool _spinning;
     private bool _rigged;
+    private double _riggedUntil; // tijdstip waarop cheat vervalt (0 = inactief)
     private double _spinStart;
     private double _lastTime;
 
@@ -139,7 +140,7 @@ public class SlotMachineGame
         HandleBetInput();
         HandleAnimation(now, dt);
         HandleClicks();
-        HandleSpaceCheat();
+        HandleKeyboardShortcuts(now);
     }
 
     private void HandleBetInput()
@@ -156,9 +157,6 @@ public class SlotMachineGame
 
         if (Raylib.IsKeyPressed(KeyboardKey.Backspace) && _betInput.Length > 0)
             _betInput = _betInput[..^1];
-
-        if (Raylib.IsKeyPressed(KeyboardKey.Enter))
-            TrySpin();
     }
 
     private void HandleAnimation(double now, float dt)
@@ -214,12 +212,27 @@ public class SlotMachineGame
         _brakeTime[i]     = now;
     }
 
-    private void HandleSpaceCheat()
+    private void HandleKeyboardShortcuts(double now)
     {
-        if (Raylib.IsKeyPressed(KeyboardKey.Space) && !_spinning && !_gameOver)
+        if (!_spinning && !_gameOver)
         {
-            _rigged = true;
-            TrySpin();
+            // Spatie: activeer cheat-modus voor 2 seconden
+            if (Raylib.IsKeyPressed(KeyboardKey.Space))
+            {
+                _rigged      = true;
+                _riggedUntil = now + 2.0;
+            }
+
+            // Cheat vervalt na 2 seconden zonder te draaien
+            if (_riggedUntil > 0 && now > _riggedUntil)
+            {
+                _rigged      = false;
+                _riggedUntil = 0;
+            }
+
+            // Enter triggert draaien (altijd, ook zonder inzetbox-focus)
+            if (Raylib.IsKeyPressed(KeyboardKey.Enter))
+                TrySpin();
         }
     }
 
@@ -254,6 +267,7 @@ public class SlotMachineGame
             ? _machine.SpinRiggedAndCalculate(bet)
             : _machine.SpinAndCalculate(bet);
         _rigged       = false;
+        _riggedUntil  = 0;
         _finalSymbols = _machine.CurrentSymbols;
         _spinning     = true;
         _spinStart    = Raylib.GetTime();
