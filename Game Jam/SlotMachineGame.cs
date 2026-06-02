@@ -11,15 +11,15 @@ public class SlotMachineGame
     // ─────────────────────────────────────────────────────────────────────────
 
     private const int W = 800, H = 600;
-    private const int StartingBalance = 100;
     private const int MinBet = 1;
     private const float SlotH = 65f;
     private const float SpinSpeed = 25f;
     private const float BrakeDuration = 0.5f;
     private const float MinBrakeTravel = 1.5f;
 
+    private readonly GlobalState _state;
+
     // Spelerstatus
-    private int _balance = StartingBalance;
     private string _betInput = "10";
     private bool _betFocused;
     private int _currentBet;
@@ -39,7 +39,7 @@ public class SlotMachineGame
 
     private bool _spinning;
     private bool _rigged;
-    private double _riggedUntil; // tijdstip waarop cheat vervalt (0 = inactief)
+    private double _riggedUntil;
     private double _spinStart;
     private double _lastTime;
 
@@ -54,59 +54,53 @@ public class SlotMachineGame
     private int   _drawOffsetY;
     private float _drawScale = 1f;
 
+    public bool WantsToGoBack { get; private set; }
+
     private enum StatusKind { Neutral, Win, Lose }
 
-    // ── Run ───────────────────────────────────────────────────────────────────
+    // ── Constructor / reset ───────────────────────────────────────────────────
 
-    public void Run()
+    public SlotMachineGame(GlobalState state)
     {
-        Raylib.SetConfigFlags(ConfigFlags.ResizableWindow);
-        Raylib.InitWindow(W, H, "Slot Machine");
-        Raylib.SetTargetFPS(60);
+        _state = state;
         TryLoadEmojiFont();
-
-        // Vaste canvas van W×H — schaalt automatisch naar elk schermformaat
-        RenderTexture2D canvas = Raylib.LoadRenderTexture(W, H);
 
         var init = _machine.CurrentSymbols;
         for (int i = 0; i < SlotCount; i++)
             _reelPos[i] = Array.IndexOf(Symbol.All, init[i]);
 
         _lastTime = Raylib.GetTime();
+    }
 
-        while (!Raylib.WindowShouldClose())
-        {
-            Update();
+    // Wordt aangeroepen vanuit Program.cs telkens de speler het spel opnieuw betreedt.
+    public void Reset()
+    {
+        if (_state.Balance <= 0)
+            _state.Balance = GlobalState.StartingBalance;
 
-            // Teken alle spelelementen op de canvas (vaste resolutie)
-            Raylib.BeginTextureMode(canvas);
-            Raylib.ClearBackground(new Color(18, 18, 35, 255));
-            Draw();
-            Raylib.EndTextureMode();
+        _betInput     = "10";
+        _betFocused   = false;
+        _gameOver     = false;
+        _spinning     = false;
+        _rigged       = false;
+        _riggedUntil  = 0;
+        WantsToGoBack = false;
+        _wheelLanded  = new bool[SlotCount];
+        _braking      = new bool[SlotCount];
+        _lastTime     = Raylib.GetTime();
 
-            // Schaal canvas naar het actuele scherm met letterboxing
-            int sw    = Raylib.GetScreenWidth();
-            int sh    = Raylib.GetScreenHeight();
-            float sc  = Math.Min((float)sw / W, (float)sh / H);
-            int dw    = (int)(W * sc);
-            int dh    = (int)(H * sc);
-            _drawOffsetX = (sw - dw) / 2;
-            _drawOffsetY = (sh - dh) / 2;
-            _drawScale   = sc;
+        var init = _machine.CurrentSymbols;
+        for (int i = 0; i < SlotCount; i++)
+            _reelPos[i] = Array.IndexOf(Symbol.All, init[i]);
 
-            Raylib.BeginDrawing();
-            Raylib.ClearBackground(Color.Black);
-            Raylib.DrawTexturePro(
-                canvas.Texture,
-                new Rectangle(0, 0, W, -H),                               // -H: flip Y (OpenGL convention)
-                new Rectangle(_drawOffsetX, _drawOffsetY, dw, dh),
-                Vector2.Zero, 0f, Color.White);
-            Raylib.EndDrawing();
-        }
+        SetStatus("Welkom! Voer een inzet in en druk op DRAAIEN.", StatusKind.Neutral);
+    }
 
-        Raylib.UnloadRenderTexture(canvas);
-        if (_fontLoaded) Raylib.UnloadFont(_emojiFont);
-        Raylib.CloseWindow();
+    public void SetDrawParams(int ox, int oy, float scale)
+    {
+        _drawOffsetX = ox;
+        _drawOffsetY = oy;
+        _drawScale   = scale;
     }
 
     private void TryLoadEmojiFont()
@@ -128,14 +122,11 @@ public class SlotMachineGame
 
     // ── Update ────────────────────────────────────────────────────────────────
 
-    private void Update()
+    public void Update()
     {
         double now = Raylib.GetTime();
         float dt   = (float)(now - _lastTime);
         _lastTime  = now;
-
-        if (Raylib.IsKeyPressed(KeyboardKey.F11))
-            ToggleFullscreenWindow();
 
         HandleBetInput();
         HandleAnimation(now, dt);
@@ -233,6 +224,10 @@ public class SlotMachineGame
             // Enter triggert draaien (altijd, ook zonder inzetbox-focus)
             if (Raylib.IsKeyPressed(KeyboardKey.Enter))
                 TrySpin();
+
+            // Escape: terug naar hoofdmenu
+            if (Raylib.IsKeyPressed(KeyboardKey.Escape))
+                WantsToGoBack = true;
         }
     }
 
@@ -247,6 +242,7 @@ public class SlotMachineGame
         if (!_spinning && !_gameOver && Hit(m, AllInButtonRect())) AllIn();
         if (_spinning  && Hit(m, StopButtonRect()))                ForceStop();
         if (_gameOver  && Hit(m, RestartButtonRect()))             Restart();
+        if (!_spinning && Hit(m, MenuButtonRect()))                WantsToGoBack = true;
     }
 
     // ── Spellogica ────────────────────────────────────────────────────────────
@@ -254,16 +250,16 @@ public class SlotMachineGame
     private void TrySpin()
     {
         if (_spinning || _gameOver) return;
-        if (!int.TryParse(_betInput, out int bet) || bet < MinBet || bet > _balance)
+        if (!int.TryParse(_betInput, out int bet) || bet < MinBet || bet > _state.Balance)
         {
-            SetStatus($"Ongeldige inzet! Voer {MinBet}–{_balance} in.", StatusKind.Lose);
+            SetStatus($"Ongeldige inzet! Voer {MinBet}–{_state.Balance} in.", StatusKind.Lose);
             return;
         }
 
-        _currentBet    = bet;
-        _balance      -= bet;
-        _betFocused    = false;
-        _pendingPayout = _rigged
+        _currentBet     = bet;
+        _state.Balance -= bet;
+        _betFocused     = false;
+        _pendingPayout  = _rigged
             ? _machine.SpinRiggedAndCalculate(bet)
             : _machine.SpinAndCalculate(bet);
         _rigged       = false;
@@ -277,7 +273,7 @@ public class SlotMachineGame
         SetStatus("Draaien...", StatusKind.Neutral);
     }
 
-    private void AllIn() => _betInput = _balance.ToString();
+    private void AllIn() => _betInput = _state.Balance.ToString();
 
     private void ForceStop()
     {
@@ -298,9 +294,9 @@ public class SlotMachineGame
 
     private void FinishSpin()
     {
-        _balance += _pendingPayout;
+        _state.Balance += _pendingPayout;
 
-        if (_balance <= 0)
+        if (_state.Balance <= 0)
         {
             _gameOver = true;
             SetStatus("GAME OVER!  U heeft geen munten meer.", StatusKind.Lose);
@@ -334,12 +330,13 @@ public class SlotMachineGame
 
     private void Restart()
     {
-        _balance     = StartingBalance;
-        _betInput    = "10";
-        _gameOver    = false;
-        _spinning    = false;
-        _wheelLanded = new bool[SlotCount];
-        _braking     = new bool[SlotCount];
+        _state.Balance = GlobalState.StartingBalance;
+        _betInput      = "10";
+        _gameOver      = false;
+        _spinning      = false;
+        WantsToGoBack  = false;
+        _wheelLanded   = new bool[SlotCount];
+        _braking       = new bool[SlotCount];
 
         var init = _machine.CurrentSymbols;
         for (int i = 0; i < SlotCount; i++)
@@ -352,7 +349,7 @@ public class SlotMachineGame
 
     // ── Draw ──────────────────────────────────────────────────────────────────
 
-    private void Draw()
+    public void Draw()
     {
         DrawTitle();
         DrawScoreBar();
@@ -374,7 +371,7 @@ public class SlotMachineGame
 
     private void DrawScoreBar()
     {
-        Raylib.DrawText($"Saldo:  {_balance} munten", 50, 94, 22, Color.White);
+        Raylib.DrawText($"Saldo:  {_state.Balance} munten", 50, 94, 22, Color.White);
         Raylib.DrawText("Inzet:", W - 230, 98, 20, new Color(180, 180, 180, 255));
         DrawTextBox(BetFieldRect(), _betInput, _betFocused);
     }
@@ -476,10 +473,11 @@ public class SlotMachineGame
 
     private void DrawButtons()
     {
-        bool canSpin = !_spinning && !_gameOver && _balance >= MinBet;
-        DrawButton(SpinButtonRect(),  "DRAAIEN", canSpin,   Color.DarkGreen);
-        DrawButton(AllInButtonRect(), "ALL IN",  canSpin,   new Color(160, 30, 30, 255));
-        DrawButton(StopButtonRect(),  "STOP",    _spinning, Color.DarkGray);
+        bool canSpin = !_spinning && !_gameOver && _state.Balance >= MinBet;
+        DrawButton(SpinButtonRect(),  "DRAAIEN", canSpin,    Color.DarkGreen);
+        DrawButton(AllInButtonRect(), "ALL IN",  canSpin,    new Color(160, 30, 30, 255));
+        DrawButton(StopButtonRect(),  "STOP",    _spinning,  Color.DarkGray);
+        DrawButton(MenuButtonRect(),  "← MENU",  !_spinning, new Color(50, 50, 90, 255));
 
         if (_gameOver)
             DrawButton(RestartButtonRect(), "OPNIEUW SPELEN", true, Color.DarkGreen);
@@ -500,7 +498,7 @@ public class SlotMachineGame
 
     private static void DrawHint()
     {
-        const string hint = "F11: volledig scherm";
+        const string hint = "F11: volledig scherm  |  Esc: menu";
         int hw = Raylib.MeasureText(hint, 12);
         Raylib.DrawText(hint, W - hw - 8, H - 18, 12, new Color(55, 55, 55, 255));
     }
@@ -565,6 +563,7 @@ public class SlotMachineGame
     private static Rectangle StopButtonRect()    => new Rectangle(660, 337, 120, 46);
     private static Rectangle RestartButtonRect() => new Rectangle((W - 200) / 2f, H / 2f + 50, 200, 50);
     private static Rectangle BetFieldRect()      => new Rectangle(W - 185f, 89f, 135f, 36f);
+    private static Rectangle MenuButtonRect()    => new Rectangle(10f, 10f, 90f, 36f);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -590,20 +589,4 @@ public class SlotMachineGame
 
     private static bool Hit(Vector2 m, Rectangle r) =>
         Raylib.CheckCollisionPointRec(m, r);
-
-    // Op Windows moet de venstergrootte naar de monitorresolutie vóór ToggleFullscreen werkt
-    private static void ToggleFullscreenWindow()
-    {
-        if (Raylib.IsWindowFullscreen())
-        {
-            Raylib.ToggleFullscreen();
-            Raylib.SetWindowSize(W, H);
-        }
-        else
-        {
-            int mon = Raylib.GetCurrentMonitor();
-            Raylib.SetWindowSize(Raylib.GetMonitorWidth(mon), Raylib.GetMonitorHeight(mon));
-            Raylib.ToggleFullscreen();
-        }
-    }
 }
