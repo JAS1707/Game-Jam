@@ -17,15 +17,32 @@ public class SlotMachineGame
     private const float BrakeDuration = 0.5f;
     private const float MinBrakeTravel = 1.5f;
 
-    private readonly GlobalState _state;
+    // ── Chips ─────────────────────────────────────────────────────────────────
+    private static readonly int[] ChipValues = [1, 5, 10, 20, 50, 100, 500, 1000];
+    private static readonly Color[] ChipColors =
+    [
+        new Color(210, 210, 210, 255),  // 1    – zilver
+        new Color(210, 50,  50,  255),  // 5    – rood
+        new Color(50,  110, 210, 255),  // 10   – blauw
+        new Color(50,  175, 60,  255),  // 20   – groen
+        new Color(220, 140, 30,  255),  // 50   – oranje
+        new Color(35,  35,  35,  255),  // 100  – zwart
+        new Color(150, 50,  200, 255),  // 500  – paars
+        new Color(215, 175, 0,   255),  // 1000 – goud
+    ];
+    private const float ChipRadius = 34f;
+    private static float ChipCX(int col) => 415 + col * 92;
+    private static float ChipCY(int row) => 370 + row * 82;
 
-    // Spelerstatus
-    private string _betInput = "10";
-    private bool _betFocused;
+    private readonly System.Collections.Generic.List<int> _betChips = new();
+    private int CurrentBet => _betChips.Count > 0 ? _betChips.Sum() : 0;
+
+    // ── Spelerstatus ─────────────────────────────────────────────────────────
+    private readonly GlobalState _state;
     private int _currentBet;
     private int _pendingPayout;
     private Symbol[]? _finalSymbols;
-    private string _statusMsg = "Welkom! Voer een inzet in en druk op DRAAIEN.";
+    private string _statusMsg = "Kies chips en druk op DRAAIEN.";
     private StatusKind _statusKind = StatusKind.Neutral;
     private bool _gameOver;
 
@@ -45,11 +62,9 @@ public class SlotMachineGame
 
     private readonly SlotMachine _machine = new(SlotCount);
 
-    // Emoji-lettertype
     private Font _emojiFont;
     private bool _fontLoaded;
 
-    // Schaal voor volledig scherm (render texture → scherm)
     private int   _drawOffsetX;
     private int   _drawOffsetY;
     private float _drawScale = 1f;
@@ -64,22 +79,18 @@ public class SlotMachineGame
     {
         _state = state;
         TryLoadEmojiFont();
-
         var init = _machine.CurrentSymbols;
         for (int i = 0; i < SlotCount; i++)
             _reelPos[i] = Array.IndexOf(Symbol.All, init[i]);
-
         _lastTime = Raylib.GetTime();
     }
 
-    // Wordt aangeroepen vanuit Program.cs telkens de speler het spel opnieuw betreedt.
     public void Reset()
     {
         if (_state.Balance <= 0)
             _state.Balance = GlobalState.StartingBalance;
 
-        _betInput     = "10";
-        _betFocused   = false;
+        _betChips.Clear();
         _gameOver     = false;
         _spinning     = false;
         _rigged       = false;
@@ -93,7 +104,7 @@ public class SlotMachineGame
         for (int i = 0; i < SlotCount; i++)
             _reelPos[i] = Array.IndexOf(Symbol.All, init[i]);
 
-        SetStatus("Welkom! Voer een inzet in en druk op DRAAIEN.", StatusKind.Neutral);
+        SetStatus("Kies chips en druk op DRAAIEN.", StatusKind.Neutral);
     }
 
     public void SetDrawParams(int ox, int oy, float scale)
@@ -112,7 +123,6 @@ public class SlotMachineGame
         _fontLoaded = _emojiFont.GlyphCount > 0;
     }
 
-    // Muispositie omgezet naar canvas-coördinaten (ongeacht schaalgrootte)
     private Vector2 CanvasMouse()
     {
         Vector2 m = Raylib.GetMousePosition();
@@ -128,26 +138,9 @@ public class SlotMachineGame
         float dt   = (float)(now - _lastTime);
         _lastTime  = now;
 
-        HandleBetInput();
         HandleAnimation(now, dt);
         HandleClicks();
         HandleKeyboardShortcuts(now);
-    }
-
-    private void HandleBetInput()
-    {
-        if (!_betFocused || _spinning || _gameOver) return;
-
-        int key = Raylib.GetCharPressed();
-        while (key > 0)
-        {
-            if (key >= '0' && key <= '9' && _betInput.Length < 5)
-                _betInput += (char)key;
-            key = Raylib.GetCharPressed();
-        }
-
-        if (Raylib.IsKeyPressed(KeyboardKey.Backspace) && _betInput.Length > 0)
-            _betInput = _betInput[..^1];
     }
 
     private void HandleAnimation(double now, float dt)
@@ -213,19 +206,13 @@ public class SlotMachineGame
                 _rigged      = true;
                 _riggedUntil = now + 2.0;
             }
-
-            // Cheat vervalt na 2 seconden zonder te draaien
             if (_riggedUntil > 0 && now > _riggedUntil)
             {
                 _rigged      = false;
                 _riggedUntil = 0;
             }
-
-            // Enter triggert draaien (altijd, ook zonder inzetbox-focus)
-            if (Raylib.IsKeyPressed(KeyboardKey.Enter))
+            if (Raylib.IsKeyPressed(KeyboardKey.Enter) && CurrentBet >= MinBet)
                 TrySpin();
-
-            // Escape: terug naar hoofdmenu
             if (Raylib.IsKeyPressed(KeyboardKey.Escape))
                 WantsToGoBack = true;
         }
@@ -236,13 +223,34 @@ public class SlotMachineGame
         if (!Raylib.IsMouseButtonPressed(MouseButton.Left)) return;
         Vector2 m = CanvasMouse();
 
-        _betFocused = Hit(m, BetFieldRect());
+        if (_spinning  && Hit(m, StopButtonRect()))    { ForceStop();         return; }
+        if (_gameOver  && Hit(m, RestartButtonRect())) { Restart();           return; }
+        if (!_spinning && Hit(m, MenuButtonRect()))    { WantsToGoBack = true; return; }
 
-        if (!_spinning && !_gameOver && Hit(m, SpinButtonRect()))  TrySpin();
-        if (!_spinning && !_gameOver && Hit(m, AllInButtonRect())) AllIn();
-        if (_spinning  && Hit(m, StopButtonRect()))                ForceStop();
-        if (_gameOver  && Hit(m, RestartButtonRect()))             Restart();
-        if (!_spinning && Hit(m, MenuButtonRect()))                WantsToGoBack = true;
+        if (!_spinning && !_gameOver)
+        {
+            if (Hit(m, SpinButtonRect()) && CurrentBet >= MinBet) { TrySpin(); return; }
+            if (Hit(m, ClearButtonRect()) && _betChips.Count > 0) { _betChips.Clear(); return; }
+
+            // Klik op de toren verwijdert de bovenste chip
+            if (Hit(m, TowerRect()) && _betChips.Count > 0)
+            {
+                _betChips.RemoveAt(_betChips.Count - 1);
+                return;
+            }
+
+            // Chip-knoppen
+            for (int i = 0; i < ChipValues.Length; i++)
+            {
+                int value = ChipValues[i];
+                if (_state.Balance <= value) continue;  // verborgen: saldo moet groter zijn dan chipwaarde
+                float cx = ChipCX(i % 4), cy = ChipCY(i / 4);
+                if (!Raylib.CheckCollisionPointCircle(m, new Vector2(cx, cy), ChipRadius)) continue;
+                if (_state.Balance - CurrentBet >= value)
+                    _betChips.Add(value);
+                break;
+            }
+        }
     }
 
     // ── Spellogica ────────────────────────────────────────────────────────────
@@ -250,15 +258,15 @@ public class SlotMachineGame
     private void TrySpin()
     {
         if (_spinning || _gameOver) return;
-        if (!int.TryParse(_betInput, out int bet) || bet < MinBet || bet > _state.Balance)
+        int bet = CurrentBet;
+        if (bet < MinBet || bet > _state.Balance)
         {
-            SetStatus($"Ongeldige inzet! Voer {MinBet}–{_state.Balance} in.", StatusKind.Lose);
+            SetStatus($"Ongeldige inzet! (min {MinBet}, max {_state.Balance})", StatusKind.Lose);
             return;
         }
 
         _currentBet     = bet;
         _state.Balance -= bet;
-        _betFocused     = false;
         _pendingPayout  = _rigged
             ? _machine.SpinRiggedAndCalculate(bet)
             : _machine.SpinAndCalculate(bet);
@@ -272,8 +280,6 @@ public class SlotMachineGame
 
         SetStatus("Draaien...", StatusKind.Neutral);
     }
-
-    private void AllIn() => _betInput = _state.Balance.ToString();
 
     private void ForceStop()
     {
@@ -294,6 +300,7 @@ public class SlotMachineGame
 
     private void FinishSpin()
     {
+        _betChips.Clear();
         _state.Balance += _pendingPayout;
 
         if (_state.Balance <= 0)
@@ -331,7 +338,7 @@ public class SlotMachineGame
     private void Restart()
     {
         _state.Balance = GlobalState.StartingBalance;
-        _betInput      = "10";
+        _betChips.Clear();
         _gameOver      = false;
         _spinning      = false;
         WantsToGoBack  = false;
@@ -342,7 +349,7 @@ public class SlotMachineGame
         for (int i = 0; i < SlotCount; i++)
             _reelPos[i] = Array.IndexOf(Symbol.All, init[i]);
 
-        SetStatus("Welkom terug! Druk op DRAAIEN.", StatusKind.Neutral);
+        SetStatus("Welkom terug! Kies chips en druk op DRAAIEN.", StatusKind.Neutral);
     }
 
     private void SetStatus(string msg, StatusKind kind) { _statusMsg = msg; _statusKind = kind; }
@@ -355,6 +362,8 @@ public class SlotMachineGame
         DrawScoreBar();
         DrawWheels();
         DrawPayTable();
+        DrawBetTower();
+        DrawChipButtons();
         DrawButtons();
         DrawStatus();
         DrawHint();
@@ -371,9 +380,7 @@ public class SlotMachineGame
 
     private void DrawScoreBar()
     {
-        Raylib.DrawText($"Saldo:  {_state.Balance} munten", 50, 94, 22, Color.White);
-        Raylib.DrawText("Inzet:", W - 230, 98, 20, new Color(180, 180, 180, 255));
-        DrawTextBox(BetFieldRect(), _betInput, _betFocused);
+        Raylib.DrawText($"Saldo:  {_state.Balance}", 50, 94, 22, Color.White);
     }
 
     private void DrawWheels()
@@ -448,35 +455,172 @@ public class SlotMachineGame
 
     private void DrawPayTable()
     {
-        int tx = 50, ty = 345;
-        Raylib.DrawText("Uitbetalingen:", tx, ty, 17, Color.Gray);
-        ty += 24;
+        int tx = 30, ty = 345;
+        Raylib.DrawText("Uitbetalingen:", tx, ty, 16, Color.Gray);
+        ty += 22;
 
         foreach (var sym in Symbol.All)
         {
-            Color c     = SymbolColor(sym);
-            int mult    = SlotMachine.JackpotMultiplier(sym, SlotCount);
-            int swMult  = SlotMachine.SmallWinMultiplier(sym, SlotCount);
+            Color c    = SymbolColor(sym);
+            int mult   = SlotMachine.JackpotMultiplier(sym, SlotCount);
+            int swMult = SlotMachine.SmallWinMultiplier(sym, SlotCount);
 
             if (_fontLoaded)
             {
-                Raylib.DrawTextEx(_emojiFont, sym.Glyph, new Vector2(tx, ty), 20f, 1f, c);
-                Raylib.DrawText($"  {SlotCount}x=x{mult}  {SlotCount - 1}x=x{swMult}", tx + 26, ty + 2, 15, c);
+                Raylib.DrawTextEx(_emojiFont, sym.Glyph, new Vector2(tx, ty), 18f, 1f, c);
+                Raylib.DrawText($"  {SlotCount}x=x{mult} {SlotCount - 1}x=x{swMult}", tx + 24, ty + 2, 14, c);
             }
             else
             {
-                Raylib.DrawText($"{SymbolFallbackText(sym),-5} {SlotCount}x=x{mult} {SlotCount - 1}x=x{swMult}", tx, ty, 15, c);
+                Raylib.DrawText($"{SymbolFallbackText(sym),-4} {SlotCount}x=x{mult} {SlotCount-1}x=x{swMult}", tx, ty, 14, c);
             }
-            ty += 22;
+            ty += 20;
         }
     }
 
+    // ── Chip-toren ────────────────────────────────────────────────────────────
+
+    private void DrawBetTower()
+    {
+        const float cx      = 305f;
+        const float baseY   = 490f;
+        const float rH      = 30f;   // horizontale radius chip-ellips
+        const float rV      = 8f;    // verticale radius chip-ellips
+        const float step    = 13f;   // pixels tussen chips
+        const int   maxVis  = 10;    // maximaal zichtbare chips in toren
+
+        // Achtergrond voor toren-slot
+        var bgRect = new Rectangle(cx - rH - 6, 338f, (rH + 6) * 2, baseY - 338 + 28);
+        Raylib.DrawRectangleRec(bgRect, new Color(6, 6, 16, 200));
+        Raylib.DrawRectangleLinesEx(bgRect, 1, new Color(40, 40, 60, 255));
+
+        // Label boven toren
+        Raylib.DrawText("INZET", (int)(cx - Raylib.MeasureText("INZET", 13) / 2), 342, 13, new Color(100, 100, 120, 255));
+
+        int count    = _betChips.Count;
+        int startIdx = Math.Max(0, count - maxVis);
+
+        for (int i = startIdx; i < count; i++)
+        {
+            int chipVal = _betChips[i];
+            int cIdx    = Array.IndexOf(ChipValues, chipVal);
+            Color col   = cIdx >= 0 ? ChipColors[cIdx] : Color.Gray;
+
+            float y = baseY - (i - startIdx + 1) * step;
+
+            // Schaduw
+            Raylib.DrawEllipse((int)cx + 2, (int)y + 3, (int)rH, (int)rV, new Color(0, 0, 0, 70));
+            // Donkere onderkant (diepte-effect)
+            Raylib.DrawEllipse((int)cx, (int)y + 2, (int)rH, (int)rV,
+                new Color((byte)(col.R / 4), (byte)(col.G / 4), (byte)(col.B / 4), (byte)255));
+            // Hoofd-chip
+            Raylib.DrawEllipse((int)cx, (int)y, (int)rH, (int)rV, col);
+            // Lichte highlight bovenaan
+            Raylib.DrawEllipse((int)cx, (int)y - 2, (int)(rH - 7), (int)Math.Max(1, rV - 4),
+                new Color(
+                    (byte)Math.Min(255, col.R + 80),
+                    (byte)Math.Min(255, col.G + 80),
+                    (byte)Math.Min(255, col.B + 80), (byte)130));
+        }
+
+        // Overflow-indicator
+        if (count > maxVis)
+        {
+            string ovf = $"+{count - maxVis}";
+            int ow = Raylib.MeasureText(ovf, 11);
+            Raylib.DrawText(ovf, (int)cx - ow / 2, (int)(baseY - maxVis * step - 14), 11, Color.Gray);
+        }
+
+        // Totaal bedrag onder de toren
+        string total    = CurrentBet > 0 ? $"{CurrentBet}" : "-";
+        Color totalCol  = CurrentBet > 0 ? Color.Yellow : new Color(55, 55, 55, 255);
+        int tw          = Raylib.MeasureText(total, 18);
+        Raylib.DrawText(total, (int)cx - tw / 2, (int)baseY + 6, 18, totalCol);
+
+        // Hover-effect op toren (hint dat je kunt klikken om te verwijderen)
+        if (!_spinning && _betChips.Count > 0)
+        {
+            Vector2 m = CanvasMouse();
+            if (Hit(m, TowerRect()))
+            {
+                Raylib.DrawRectangleLinesEx(bgRect, 1, new Color(180, 60, 60, 180));
+                int hw = Raylib.MeasureText("↩", 11);
+                Raylib.DrawText("↩", (int)cx - hw / 2, (int)baseY + 24, 11, new Color(180, 60, 60, 200));
+            }
+        }
+    }
+
+    // ── Chip-knoppen ──────────────────────────────────────────────────────────
+
+    private void DrawChipButtons()
+    {
+        for (int i = 0; i < ChipValues.Length; i++)
+        {
+            int value = ChipValues[i];
+            if (_state.Balance <= value) continue;  // verborgen: saldo moet strikt groter zijn
+
+            bool canAdd = !_spinning && !_gameOver && (_state.Balance - CurrentBet) >= value;
+            DrawSingleChip(i, canAdd);
+        }
+    }
+
+    private void DrawSingleChip(int index, bool available)
+    {
+        int   value  = ChipValues[index];
+        Color col    = ChipColors[index];
+        float cx     = ChipCX(index % 4);
+        float cy     = ChipCY(index / 4);
+        float r      = ChipRadius;
+
+        Vector2 m  = CanvasMouse();
+        bool hover = available && Raylib.CheckCollisionPointCircle(m, new Vector2(cx, cy), r);
+
+        Color chipCol = available ? col : new Color(50, 50, 55, 255);
+
+        // Lichtere rand-kleur
+        Color edgeCol = available
+            ? new Color(
+                (byte)Math.Min(255, chipCol.R + 65),
+                (byte)Math.Min(255, chipCol.G + 65),
+                (byte)Math.Min(255, chipCol.B + 65), (byte)255)
+            : new Color(70, 70, 75, 255);
+
+        if (hover) chipCol = edgeCol;
+
+        // Schaduw
+        Raylib.DrawCircle((int)cx + 2, (int)cy + 3, r, new Color(0, 0, 0, 110));
+        // Rand-ring
+        Raylib.DrawCircle((int)cx, (int)cy, r, edgeCol);
+        // Hoofd-chip
+        Raylib.DrawCircle((int)cx, (int)cy, r - 4, chipCol);
+        // Decoratieve binnencirkel (casino-stijl streeppatroon gesimuleerd via ring)
+        Raylib.DrawCircleLines((int)cx, (int)cy, r - 9,  new Color(255, 255, 255, 35));
+        Raylib.DrawCircleLines((int)cx, (int)cy, r - 14, new Color(255, 255, 255, 20));
+
+        // Waarde-label
+        string label = value >= 1000 ? "1K" : value.ToString();
+        int    fs    = value >= 100 ? 14 : 16;
+        int    lw    = Raylib.MeasureText(label, fs);
+
+        // Zilveren chip (licht) krijgt donkere tekst
+        bool lightChip = available && chipCol.R > 150 && chipCol.G > 150 && chipCol.B > 150;
+        Color textCol  = available
+            ? (lightChip ? new Color(30, 30, 30, 255) : Color.White)
+            : new Color(85, 85, 85, 255);
+
+        Raylib.DrawText(label, (int)cx - lw / 2, (int)cy - fs / 2, fs, textCol);
+    }
+
+    // ── Knoppen / UI ─────────────────────────────────────────────────────────
+
     private void DrawButtons()
     {
-        bool canSpin = !_spinning && !_gameOver && _state.Balance >= MinBet;
-        DrawButton(SpinButtonRect(),  "DRAAIEN", canSpin,    Color.DarkGreen);
-        DrawButton(AllInButtonRect(), "ALL IN",  canSpin,    new Color(160, 30, 30, 255));
-        DrawButton(StopButtonRect(),  "STOP",    _spinning,  Color.DarkGray);
+        bool canSpin  = !_spinning && !_gameOver && CurrentBet >= MinBet;
+        bool canClear = !_spinning && !_gameOver && _betChips.Count > 0;
+
+        DrawButton(SpinButtonRect(),  "DRAAIEN", canSpin,   Color.DarkGreen);
+        DrawButton(StopButtonRect(),  "STOP",    _spinning, Color.DarkGray);
+        DrawButton(ClearButtonRect(), "WISSEN",  canClear,  new Color(110, 50, 15, 255));
         DrawButton(MenuButtonRect(),  "← MENU",  !_spinning, new Color(50, 50, 90, 255));
 
         if (_gameOver)
@@ -491,16 +635,16 @@ public class SlotMachineGame
             StatusKind.Lose => Color.Red,
             _               => new Color(180, 180, 180, 255)
         };
-        int fs = 21;
+        int fs = 20;
         int tw = Raylib.MeasureText(_statusMsg, fs);
-        Raylib.DrawText(_statusMsg, Math.Max(30, (W - tw) / 2), 550, fs, c);
+        Raylib.DrawText(_statusMsg, Math.Max(30, (W - tw) / 2), 548, fs, c);
     }
 
     private static void DrawHint()
     {
-        const string hint = "F11: volledig scherm  |  Esc: menu";
-        int hw = Raylib.MeasureText(hint, 12);
-        Raylib.DrawText(hint, W - hw - 8, H - 18, 12, new Color(55, 55, 55, 255));
+        const string hint = "F11: volledig scherm  |  Esc: menu  |  klik toren: verwijder chip";
+        int hw = Raylib.MeasureText(hint, 11);
+        Raylib.DrawText(hint, W - hw - 6, H - 16, 11, new Color(50, 50, 50, 255));
     }
 
     private void DrawGameOverOverlay()
@@ -518,14 +662,6 @@ public class SlotMachineGame
         DrawButton(RestartButtonRect(), "OPNIEUW SPELEN", true, Color.DarkGreen);
     }
 
-    private void DrawTextBox(Rectangle rect, string text, bool focused)
-    {
-        Raylib.DrawRectangleRec(rect, new Color(28, 28, 50, 255));
-        Raylib.DrawRectangleLinesEx(rect, 2, focused ? Color.Yellow : Color.Gray);
-        bool cur = focused && (int)(Raylib.GetTime() * 2) % 2 == 0;
-        Raylib.DrawText(text + (cur ? "|" : ""), (int)rect.X + 8, (int)rect.Y + 8, 20, Color.White);
-    }
-
     private void DrawButton(Rectangle rect, string label, bool enabled, Color normalBg)
     {
         Vector2 m  = CanvasMouse();
@@ -538,16 +674,15 @@ public class SlotMachineGame
         Raylib.DrawRectangleRec(rect, bg);
         Raylib.DrawRectangleLinesEx(rect, 2, border);
 
-        int tw = Raylib.MeasureText(label, 20);
+        int tw = Raylib.MeasureText(label, 18);
         Raylib.DrawText(label,
             (int)(rect.X + (rect.Width  - tw) / 2),
-            (int)(rect.Y + (rect.Height - 20) / 2),
-            20, fg);
+            (int)(rect.Y + (rect.Height - 18) / 2),
+            18, fg);
     }
 
     // ── Rechthoeken ───────────────────────────────────────────────────────────
 
-    // Wielgrootte schaalt automatisch op basis van SlotCount
     private static Rectangle WheelRect(int i)
     {
         const float maxWheelW = 175f, gap = 12f;
@@ -558,12 +693,12 @@ public class SlotMachineGame
         return new Rectangle(startX + i * (wheelW + gap), 128f, wheelW, 195f);
     }
 
-    private static Rectangle SpinButtonRect()    => new Rectangle(390, 337, 140, 46);
-    private static Rectangle AllInButtonRect()   => new Rectangle(540, 337, 110, 46);
-    private static Rectangle StopButtonRect()    => new Rectangle(660, 337, 120, 46);
+    private static Rectangle SpinButtonRect()    => new Rectangle(270f, 510f, 130f, 34f);
+    private static Rectangle StopButtonRect()    => new Rectangle(410f, 510f, 100f, 34f);
+    private static Rectangle ClearButtonRect()   => new Rectangle(520f, 510f, 120f, 34f);
     private static Rectangle RestartButtonRect() => new Rectangle((W - 200) / 2f, H / 2f + 50, 200, 50);
-    private static Rectangle BetFieldRect()      => new Rectangle(W - 185f, 89f, 135f, 36f);
     private static Rectangle MenuButtonRect()    => new Rectangle(10f, 10f, 90f, 36f);
+    private static Rectangle TowerRect()         => new Rectangle(272f, 338f, 66f, 160f);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
