@@ -21,7 +21,32 @@ public class SlotMachine
 
     public int SpinRiggedAndCalculate(int bet)
     {
-        foreach (var wheel in _wheels) wheel.ForceSymbol(Symbol.Diamond);
+        var rng = Random.Shared;
+
+        // Vaker goedkope symbolen, zelden diamant — minder verdacht
+        int[] rigWeights = [35, 28, 20, 12, 5];
+        int total = rigWeights.Sum();
+        int roll  = rng.Next(total);
+        int cum   = 0;
+        Symbol winSym = Symbol.Cherry;
+        for (int i = 0; i < Symbol.All.Length; i++)
+        {
+            cum += rigWeights[i];
+            if (roll < cum) { winSym = Symbol.All[i]; break; }
+        }
+
+        // 40% jackpot (alle gelijk), 60% kleine win (N-1 gelijk)
+        bool jackpot = _wheels.Length <= 2 || rng.Next(5) < 2;
+
+        foreach (var w in _wheels) w.ForceSymbol(winSym);
+
+        if (!jackpot)
+        {
+            // Één willekeurig wiel krijgt een ander symbool
+            Symbol[] others = Symbol.All.Where(s => s != winSym).ToArray();
+            _wheels[rng.Next(_wheels.Length)].ForceSymbol(others[rng.Next(others.Length)]);
+        }
+
         return CalculatePayout(bet);
     }
 
