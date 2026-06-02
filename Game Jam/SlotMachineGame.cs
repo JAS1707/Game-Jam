@@ -570,46 +570,79 @@ public class SlotMachineGame
         Color col    = ChipColors[index];
         float cx     = ChipCX(index % 4);
         float cy     = ChipCY(index / 4);
-        float r      = ChipRadius;
+        const float r = ChipRadius;
 
+        var center = new Vector2(cx, cy);
         Vector2 m  = CanvasMouse();
-        bool hover = available && Raylib.CheckCollisionPointCircle(m, new Vector2(cx, cy), r);
+        bool hover = available && Raylib.CheckCollisionPointCircle(m, center, r);
 
-        Color chipCol = available ? col : new Color(50, 50, 55, 255);
+        Color main  = available ? col : new Color(52, 52, 58, 255);
+        Color dark  = ChipScale(main, 0.42f);
+        Color light = ChipAdd(main, 65);
+        if (hover) main = light;
 
-        // Lichtere rand-kleur
-        Color edgeCol = available
-            ? new Color(
-                (byte)Math.Min(255, chipCol.R + 65),
-                (byte)Math.Min(255, chipCol.G + 65),
-                (byte)Math.Min(255, chipCol.B + 65), (byte)255)
-            : new Color(70, 70, 75, 255);
+        // ── 1. Slagschaduw ────────────────────────────────────────────────────
+        Raylib.DrawCircleV(new Vector2(cx + 2, cy + 4), r, new Color(0, 0, 0, 95));
 
-        if (hover) chipCol = edgeCol;
+        // ── 2. Buitenste stalen rand (metallic rim) ───────────────────────────
+        Raylib.DrawCircleV(center, r, dark);
 
-        // Schaduw
-        Raylib.DrawCircle((int)cx + 2, (int)cy + 3, r, new Color(0, 0, 0, 110));
-        // Rand-ring
-        Raylib.DrawCircle((int)cx, (int)cy, r, edgeCol);
-        // Hoofd-chip
-        Raylib.DrawCircle((int)cx, (int)cy, r - 4, chipCol);
-        // Decoratieve binnencirkel (casino-stijl streeppatroon gesimuleerd via ring)
-        Raylib.DrawCircleLines((int)cx, (int)cy, r - 9,  new Color(255, 255, 255, 35));
-        Raylib.DrawCircleLines((int)cx, (int)cy, r - 14, new Color(255, 255, 255, 20));
+        // ── 3. Hoofd-chip-body ────────────────────────────────────────────────
+        Raylib.DrawCircleV(center, r - 2f, main);
 
-        // Waarde-label
+        // ── 4. Casino-segmenten: 6 witte vlakken afgewisseld in de buitenrand ─
+        Color segCol = available ? new Color(255, 255, 255, 108) : new Color(130, 130, 130, 44);
+        for (int s = 0; s < 12; s++)
+        {
+            if (s % 2 != 0) continue;
+            float a0 = s * 30f - 90f;
+            Raylib.DrawRing(center, r - 9f, r - 2.5f, a0, a0 + 21f, 5, segCol);
+        }
+
+        // ── 5. Donkere scheidingsring tussen buitenrand en binnenvlak ─────────
+        Raylib.DrawRing(center, r - 11f, r - 9.5f, 0f, 360f, 24, new Color(0, 0, 0, 65));
+
+        // ── 6. Binnenste chip-vlak (iets donkerder voor diepte) ───────────────
+        Raylib.DrawCircleV(center, r - 11f, ChipScale(main, 0.80f));
+
+        // ── 7. Witte decoratieve binnenring ───────────────────────────────────
+        Color ringCol = available ? new Color(255, 255, 255, 78) : new Color(110, 110, 110, 35);
+        Raylib.DrawRing(center, r - 14f, r - 11f, 0f, 360f, 24, ringCol);
+
+        // ── 8. Center-vlak ────────────────────────────────────────────────────
+        Raylib.DrawCircleV(center, r - 14f, main);
+
+        // ── 9. Glans-highlight (lichte boog linksboven) ───────────────────────
+        Raylib.DrawRing(center, r - 5f, r - 1f, 210f, 290f, 8, new Color(255, 255, 255, 32));
+        Raylib.DrawCircleV(new Vector2(cx - r * 0.25f, cy - r * 0.30f), r * 0.20f,
+            new Color(255, 255, 255, 20));
+
+        // ── 10. Waarde-tekst ──────────────────────────────────────────────────
         string label = value >= 1000 ? "1K" : value.ToString();
         int    fs    = value >= 100 ? 14 : 16;
         int    lw    = Raylib.MeasureText(label, fs);
+        int    lx    = (int)cx - lw / 2;
+        int    ly    = (int)cy - fs / 2;
 
-        // Zilveren chip (licht) krijgt donkere tekst
-        bool lightChip = available && chipCol.R > 150 && chipCol.G > 150 && chipCol.B > 150;
-        Color textCol  = available
-            ? (lightChip ? new Color(30, 30, 30, 255) : Color.White)
-            : new Color(85, 85, 85, 255);
+        bool lightBg  = main.R > 155 && main.G > 155 && main.B > 155;
+        Color textCol = available
+            ? (lightBg ? new Color(25, 25, 25, 255) : Color.White)
+            : new Color(82, 82, 82, 255);
 
-        Raylib.DrawText(label, (int)cx - lw / 2, (int)cy - fs / 2, fs, textCol);
+        if (available)
+            Raylib.DrawText(label, lx + 1, ly + 1, fs, new Color(0, 0, 0, lightBg ? 70 : 180));
+        Raylib.DrawText(label, lx, ly, fs, textCol);
     }
+
+    private static Color ChipScale(Color c, float f) =>
+        new Color((byte)(c.R * f), (byte)(c.G * f), (byte)(c.B * f), c.A);
+
+    private static Color ChipAdd(Color c, int v) =>
+        new Color(
+            (byte)Math.Min(255, c.R + v),
+            (byte)Math.Min(255, c.G + v),
+            (byte)Math.Min(255, c.B + v),
+            c.A);
 
     // ── Knoppen / UI ─────────────────────────────────────────────────────────
 
