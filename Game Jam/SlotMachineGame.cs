@@ -1,42 +1,47 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 using Raylib_cs;
 
 namespace Game_Jam;
 
-/// <summary>
-/// Raylib-venster voor de slotmachine.
-/// Beheert spelerstatus en roept SlotMachine aan voor de logica.
-/// </summary>
 public class SlotMachineGame
 {
-    // ── Venster ───────────────────────────────────────────────────────────────
     private const int W = 800, H = 600;
-
-    // ── Spelconfiguratie ──────────────────────────────────────────────────────
     private const int StartingBalance = 100;
     private const int MinBet = 1;
+    private const float SlotH = 65f;          // hoogte van één symboolslot in pixels
+    private const float SpinSpeed = 16f;       // symbolen per seconde op volle snelheid
+    private const float BrakeDuration = 0.5f;  // seconden om te vertragen
+    private const float MinBrakeTravel = 1.5f; // minimale symbolen bij afremmen
 
-    // ── Spelerstatus ──────────────────────────────────────────────────────────
+    // Spelerstatus
     private int _balance = StartingBalance;
     private string _betInput = "10";
     private bool _betFocused;
     private int _currentBet;
     private int _pendingPayout;
     private Symbol[]? _finalSymbols;
-    private Symbol[] _displaySymbols = Array.Empty<Symbol>();
     private string _statusMsg = "Welkom! Voer een inzet in en druk op DRAAIEN.";
     private StatusKind _statusKind = StatusKind.Neutral;
     private bool _gameOver;
 
-    // ── Animatie ──────────────────────────────────────────────────────────────
+    // Reel scroll-animatie (één continue positie per wiel in symbool-index-eenheden)
+    private float[] _reelPos       = [0f, 0f, 0f];
+    private bool[]  _wheelLanded   = [false, false, false];
+    private bool[]  _braking       = [false, false, false];
+    private float[] _brakeStartPos = [0f, 0f, 0f];
+    private float[] _brakeDist     = [0f, 0f, 0f];
+    private double[] _brakeTime    = [0.0, 0.0, 0.0];
+
     private bool _spinning;
     private double _spinStart;
-    private double _lastShuffle;
-    private readonly Random _rng = new();
+    private double _lastTime;
+
     private readonly SlotMachine _machine = new();
+
+    // Emoji-lettertype
+    private Font _emojiFont;
+    private bool _fontLoaded;
 
     private enum StatusKind { Neutral, Win, Lose }
 
@@ -47,27 +52,46 @@ public class SlotMachineGame
         Raylib.InitWindow(W, H, "Slot Machine");
         Raylib.SetTargetFPS(60);
 
-        _displaySymbols = _machine.CurrentSymbols;
+        TryLoadEmojiFont();
+
+        var init = _machine.CurrentSymbols;
+        for (int i = 0; i < 3; i++)
+            _reelPos[i] = Array.IndexOf(Symbol.All, init[i]);
+
+        _lastTime = Raylib.GetTime();
 
         while (!Raylib.WindowShouldClose())
         {
             Update();
-
             Raylib.BeginDrawing();
             Raylib.ClearBackground(new Color(18, 18, 35, 255));
             Draw();
             Raylib.EndDrawing();
         }
 
+        if (_fontLoaded) Raylib.UnloadFont(_emojiFont);
         Raylib.CloseWindow();
+    }
+
+    private void TryLoadEmojiFont()
+    {
+        const string path = @"C:\Windows\Fonts\seguiemj.ttf";
+        if (!System.IO.File.Exists(path)) return;
+        int[] codepoints = [0x1F352, 0x1F34B, 0x1F514, 0x2B50, 0x1F48E];
+        _emojiFont = Raylib.LoadFontEx(path, 64, codepoints, codepoints.Length);
+        _fontLoaded = _emojiFont.GlyphCount > 0;
     }
 
     // ── Update ────────────────────────────────────────────────────────────────
 
     private void Update()
     {
+        double now = Raylib.GetTime();
+        float dt = (float)(now - _lastTime);
+        _lastTime = now;
+
         HandleBetInput();
-        HandleAnimation();
+        HandleAnimation(now, dt);
         HandleClicks();
     }
 
@@ -90,38 +114,60 @@ public class SlotMachineGame
             TrySpin();
     }
 
-    private void HandleAnimation()
+    private void HandleAnimation(double now, float dt)
     {
         if (!_spinning) return;
 
-        double now = Raylib.GetTime();
-        if (now - _lastShuffle < 0.08) return;
-        _lastShuffle = now;
-
         double elapsed = now - _spinStart;
+        double[] stopTimes = [1.4, 1.9, 2.4];
 
-        if (elapsed < 1.5)
+        for (int i = 0; i < 3; i++)
         {
-            for (int i = 0; i < 3; i++)
-                _displaySymbols[i] = RandomSymbol();
+            if (_wheelLanded[i]) continue;
+
+            if (_braking[i])
+            {
+                // Cubic ease-out: snel starten, langzaam stoppen op exact doelsymbool
+                float t = Math.Min((float)((now - _brakeTime[i]) / BrakeDuration), 1f);
+                float eased = 1f - (float)Math.Pow(1.0 - t, 3);
+                _reelPos[i] = _brakeStartPos[i] + _brakeDist[i] * eased;
+
+                if (t >= 1f)
+                {
+                    _wheelLanded[i] = true;
+                    if (_wheelLanded[0] && _wheelLanded[1] && _wheelLanded[2])
+                    {
+                        _spinning = false;
+                        FinishSpin();
+                    }
+                }
+            }
+            else if (elapsed >= stopTimes[i])
+            {
+                StartBraking(i, now);
+            }
+            else
+            {
+                // Vrij draaien: aanloop + volle snelheid
+                float speed = elapsed < 0.4 ? (float)(elapsed / 0.4 * SpinSpeed) : SpinSpeed;
+                _reelPos[i] += speed * dt;
+                float len = Symbol.All.Length;
+                while (_reelPos[i] >= len) _reelPos[i] -= len;
+            }
         }
-        else if (elapsed < 1.7)
-        {
-            _displaySymbols[0] = _finalSymbols![0];
-            _displaySymbols[1] = RandomSymbol();
-            _displaySymbols[2] = RandomSymbol();
-        }
-        else if (elapsed < 1.9)
-        {
-            _displaySymbols[1] = _finalSymbols![1];
-            _displaySymbols[2] = RandomSymbol();
-        }
-        else
-        {
-            _displaySymbols = _finalSymbols!.ToArray();
-            _spinning = false;
-            FinishSpin();
-        }
+    }
+
+    private void StartBraking(int i, double now)
+    {
+        int targetIdx = Array.IndexOf(Symbol.All, _finalSymbols![i]);
+        float remaining = targetIdx - _reelPos[i];
+        if (remaining < 0) remaining += Symbol.All.Length;
+        if (remaining < MinBrakeTravel) remaining += Symbol.All.Length;
+
+        _braking[i] = true;
+        _brakeStartPos[i] = _reelPos[i];
+        _brakeDist[i] = remaining;
+        _brakeTime[i] = now;
     }
 
     private void HandleClicks()
@@ -132,11 +178,12 @@ public class SlotMachineGame
         _betFocused = Hit(m, BetFieldRect());
 
         if (!_spinning && !_gameOver && Hit(m, SpinButtonRect())) TrySpin();
-        if (_spinning && Hit(m, StopButtonRect()))               ForceStop();
-        if (_gameOver && Hit(m, RestartButtonRect()))            Restart();
+        if (!_spinning && !_gameOver && Hit(m, AllInButtonRect())) AllIn();
+        if (_spinning && Hit(m, StopButtonRect()))                ForceStop();
+        if (_gameOver && Hit(m, RestartButtonRect()))             Restart();
     }
 
-    // ── Game logica ───────────────────────────────────────────────────────────
+    // ── Spellogica ────────────────────────────────────────────────────────────
 
     private void TrySpin()
     {
@@ -154,14 +201,30 @@ public class SlotMachineGame
         _finalSymbols  = _machine.CurrentSymbols;
         _spinning      = true;
         _spinStart     = Raylib.GetTime();
-        _lastShuffle   = _spinStart;
+        _wheelLanded   = [false, false, false];
+        _braking       = [false, false, false];
 
         SetStatus("Draaien...", StatusKind.Neutral);
     }
 
+    private void AllIn()
+    {
+        _betInput = _balance.ToString();
+    }
+
     private void ForceStop()
     {
-        _displaySymbols = _finalSymbols!.ToArray();
+        double now = Raylib.GetTime();
+        for (int i = 0; i < 3; i++)
+            if (!_wheelLanded[i] && !_braking[i]) StartBraking(i, now);
+
+        for (int i = 0; i < 3; i++)
+            if (!_wheelLanded[i])
+            {
+                _reelPos[i] = _brakeStartPos[i] + _brakeDist[i];
+                _wheelLanded[i] = true;
+            }
+
         _spinning = false;
         FinishSpin();
     }
@@ -192,19 +255,21 @@ public class SlotMachineGame
 
     private void Restart()
     {
-        _balance        = StartingBalance;
-        _betInput       = "10";
-        _gameOver       = false;
-        _spinning       = false;
-        _displaySymbols = _machine.CurrentSymbols;
+        _balance     = StartingBalance;
+        _betInput    = "10";
+        _gameOver    = false;
+        _spinning    = false;
+        _wheelLanded = [false, false, false];
+        _braking     = [false, false, false];
+
+        var init = _machine.CurrentSymbols;
+        for (int i = 0; i < 3; i++)
+            _reelPos[i] = Array.IndexOf(Symbol.All, init[i]);
+
         SetStatus("Welkom terug! Druk op DRAAIEN.", StatusKind.Neutral);
     }
 
-    private void SetStatus(string msg, StatusKind kind)
-    {
-        _statusMsg  = msg;
-        _statusKind = kind;
-    }
+    private void SetStatus(string msg, StatusKind kind) { _statusMsg = msg; _statusKind = kind; }
 
     // ── Draw ──────────────────────────────────────────────────────────────────
 
@@ -229,9 +294,7 @@ public class SlotMachineGame
 
     private void DrawScoreBar()
     {
-        string bal = $"Saldo:  {_balance} munten";
-        Raylib.DrawText(bal, 50, 94, 22, Color.White);
-
+        Raylib.DrawText($"Saldo:  {_balance} munten", 50, 94, 22, Color.White);
         Raylib.DrawText("Inzet:", W - 230, 98, 20, new Color(180, 180, 180, 255));
         DrawTextBox(BetFieldRect(), _betInput, _betFocused);
     }
@@ -245,55 +308,101 @@ public class SlotMachineGame
     private void DrawWheel(int index)
     {
         Rectangle rect = WheelRect(index);
-        Symbol sym     = _displaySymbols[index];
-        Color symColor = SymbolColor(sym);
-        Color bgColor  = DimColor(symColor, 0.12f);
+        bool wheelSpinning = _spinning && !_wheelLanded[index];
+        Color border = wheelSpinning ? new Color(130, 130, 130, 255) : Color.Gold;
 
-        Raylib.DrawRectangleRec(rect, bgColor);
-        Raylib.DrawRectangleLinesEx(rect, 3, _spinning ? Color.DarkGray : Color.Gold);
+        Raylib.DrawRectangleRec(rect, new Color(10, 10, 25, 255));
 
-        // Wiel-label bovenaan
+        // Scrollende symbolen, bijgesneden tot het wielgebied
+        Raylib.BeginScissorMode((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height);
+
+        int symCount = Symbol.All.Length;
+        float pos    = _reelPos[index];
+        int baseIdx  = (int)pos;
+        float frac   = pos - baseIdx;                  // 0..1, voortgang naar volgend symbool
+        float centerY = rect.Y + rect.Height / 2f;
+
+        // Teken genoeg symbolen om het wiel te vullen (inclusief overloop)
+        for (int d = -2; d <= 3; d++)
+        {
+            int symIdx  = ((baseIdx + d) % symCount + symCount) % symCount;
+            Symbol sym  = Symbol.All[symIdx];
+            float symCY = centerY + (d - frac) * SlotH; // beweegt omhoog naarmate frac toeneemt
+            DrawSymbolAt(sym, rect.X, symCY, rect.Width, wheelSpinning);
+        }
+
+        Raylib.EndScissorMode();
+
+        // Winlijn highlight (middelste slot)
+        int wy = (int)(rect.Y + rect.Height / 2f - SlotH / 2f);
+        Raylib.DrawRectangle((int)rect.X, wy, (int)rect.Width, (int)SlotH, new Color(255, 255, 255, 12));
+        Raylib.DrawLine((int)rect.X, wy,             (int)(rect.X + rect.Width), wy,             new Color(255, 215, 0, 120));
+        Raylib.DrawLine((int)rect.X, wy + (int)SlotH,(int)(rect.X + rect.Width), wy + (int)SlotH,new Color(255, 215, 0, 120));
+
+        // Fade boven en onder zodat symbolen vloeiend verdwijnen
+        int fadeH = 45;
+        Raylib.DrawRectangleGradientV(
+            (int)rect.X, (int)rect.Y, (int)rect.Width, fadeH,
+            new Color(10, 10, 25, 230), new Color(10, 10, 25, 0));
+        Raylib.DrawRectangleGradientV(
+            (int)rect.X, (int)(rect.Y + rect.Height - fadeH), (int)rect.Width, fadeH,
+            new Color(10, 10, 25, 0), new Color(10, 10, 25, 230));
+
+        Raylib.DrawRectangleLinesEx(rect, 3, border);
+
         string lbl = $"Wiel {index + 1}";
-        int lw = Raylib.MeasureText(lbl, 15);
-        Raylib.DrawText(lbl, (int)(rect.X + (rect.Width - lw) / 2), (int)rect.Y + 6, 15, Color.Gray);
+        int lw = Raylib.MeasureText(lbl, 14);
+        Raylib.DrawText(lbl, (int)(rect.X + (rect.Width - lw) / 2), (int)rect.Y + 4, 14, Color.DarkGray);
+    }
 
-        // Symboolnaam gecentreerd
-        string sym_text = SymbolText(sym);
-        int fs = 44;
-        int tw = Raylib.MeasureText(sym_text, fs);
-        Raylib.DrawText(sym_text,
-            (int)(rect.X + (rect.Width - tw) / 2),
-            (int)(rect.Y + (rect.Height - fs) / 2 + 8),
-            fs, symColor);
+    private void DrawSymbolAt(Symbol sym, float x, float centerY, float width, bool dim)
+    {
+        Color c = SymbolColor(sym);
+        if (dim) c = new Color((byte)(c.R / 2), (byte)(c.G / 2), (byte)(c.B / 2), c.A);
 
-        // Multiplier onderaan
-        string mult = $"x{sym.Multiplier}";
-        int mw = Raylib.MeasureText(mult, 17);
-        Raylib.DrawText(mult,
-            (int)(rect.X + (rect.Width - mw) / 2),
-            (int)(rect.Y + rect.Height - 26),
-            17, new Color(130, 130, 130, 255));
+        if (_fontLoaded)
+        {
+            const float fs = 46f;
+            Vector2 size = Raylib.MeasureTextEx(_emojiFont, sym.Glyph, fs, 1f);
+            var pos = new Vector2(x + (width - size.X) / 2f, centerY - size.Y / 2f);
+            Raylib.DrawTextEx(_emojiFont, sym.Glyph, pos, fs, 1f, c);
+        }
+        else
+        {
+            string txt = SymbolFallbackText(sym);
+            int fs = 36;
+            int tw = Raylib.MeasureText(txt, fs);
+            Raylib.DrawText(txt, (int)(x + (width - tw) / 2), (int)(centerY - fs / 2f), fs, c);
+        }
     }
 
     private void DrawPayTable()
     {
-        int tableX = 50, tableY = 310;
-        Raylib.DrawText("Uitbetalingen:", tableX, tableY, 17, Color.Gray);
-        tableY += 22;
+        int tx = 50, ty = 345;
+        Raylib.DrawText("Uitbetalingen:", tx, ty, 17, Color.Gray);
+        ty += 24;
 
         foreach (var sym in Symbol.All)
         {
             Color c = SymbolColor(sym);
-            string line = $"{SymbolText(sym),-5}  3x = x{sym.Multiplier}   2x = x1.5";
-            Raylib.DrawText(line, tableX, tableY, 16, c);
-            tableY += 20;
+            if (_fontLoaded)
+            {
+                Raylib.DrawTextEx(_emojiFont, sym.Glyph, new Vector2(tx, ty), 20f, 1f, c);
+                Raylib.DrawText($"  3x = x{sym.Multiplier}  |  2x = x1.5", tx + 26, ty + 2, 16, c);
+            }
+            else
+            {
+                Raylib.DrawText($"{SymbolFallbackText(sym),-5}  3x = x{sym.Multiplier}  |  2x = x1.5", tx, ty, 16, c);
+            }
+            ty += 22;
         }
     }
 
     private void DrawButtons()
     {
         bool canSpin = !_spinning && !_gameOver && _balance >= MinBet;
-        DrawButton(SpinButtonRect(), "DRAAIEN", canSpin, Color.DarkGreen);
+        DrawButton(SpinButtonRect(),  "DRAAIEN", canSpin,   Color.DarkGreen);
+        DrawButton(AllInButtonRect(), "ALL IN",  canSpin,   new Color(160, 30, 30, 255));
         DrawButton(StopButtonRect(),  "STOP",    _spinning, Color.DarkGray);
 
         if (_gameOver)
@@ -308,16 +417,13 @@ public class SlotMachineGame
             StatusKind.Lose => Color.Red,
             _               => new Color(180, 180, 180, 255)
         };
-
         int fs = 21;
         int tw = Raylib.MeasureText(_statusMsg, fs);
-        int x  = Math.Max(30, (W - tw) / 2);
-        Raylib.DrawText(_statusMsg, x, 540, fs, c);
+        Raylib.DrawText(_statusMsg, Math.Max(30, (W - tw) / 2), 550, fs, c);
     }
 
     private void DrawGameOverOverlay()
     {
-        // Semi-transparante achtergrond
         Raylib.DrawRectangle(0, 0, W, H, new Color(0, 0, 0, 170));
 
         const string title = "GAME  OVER";
@@ -331,16 +437,12 @@ public class SlotMachineGame
         DrawButton(RestartButtonRect(), "OPNIEUW SPELEN", true, Color.DarkGreen);
     }
 
-    // ── Teken-helpers ─────────────────────────────────────────────────────────
-
     private void DrawTextBox(Rectangle rect, string text, bool focused)
     {
         Raylib.DrawRectangleRec(rect, new Color(28, 28, 50, 255));
         Raylib.DrawRectangleLinesEx(rect, 2, focused ? Color.Yellow : Color.Gray);
-
-        bool showCursor = focused && (int)(Raylib.GetTime() * 2) % 2 == 0;
-        string display  = text + (showCursor ? "|" : "");
-        Raylib.DrawText(display, (int)rect.X + 8, (int)rect.Y + 8, 20, Color.White);
+        bool cur = focused && (int)(Raylib.GetTime() * 2) % 2 == 0;
+        Raylib.DrawText(text + (cur ? "|" : ""), (int)rect.X + 8, (int)rect.Y + 8, 20, Color.White);
     }
 
     private void DrawButton(Rectangle rect, string label, bool enabled, Color normalBg)
@@ -349,13 +451,9 @@ public class SlotMachineGame
         bool hover = enabled && Hit(m, rect);
 
         Color bg = !enabled ? new Color(40, 40, 50, 255)
-                 : hover    ? Color.Yellow
-                 :            normalBg;
-
+                 : hover    ? Color.Yellow : normalBg;
         Color fg = !enabled ? Color.DarkGray
-                 : hover    ? Color.Black
-                 :            Color.White;
-
+                 : hover    ? Color.Black  : Color.White;
         Color border = enabled ? Color.White : new Color(60, 60, 60, 255);
 
         Raylib.DrawRectangleRec(rect, bg);
@@ -370,19 +468,21 @@ public class SlotMachineGame
 
     // ── Rechthoeken ───────────────────────────────────────────────────────────
 
+    // Wiel: y=128, hoogte=195 (3 slots × 65 px)
     private static Rectangle WheelRect(int i)
     {
-        const float wheelW = 175f, wheelH = 155f, gap = 18f;
+        const float wheelW = 175f, wheelH = 195f, gap = 18f;
         float startX = (W - 3f * wheelW - 2f * gap) / 2f;
         return new Rectangle(startX + i * (wheelW + gap), 128f, wheelW, wheelH);
     }
 
-    private static Rectangle SpinButtonRect()    => new Rectangle(480, 315, 130, 46);
-    private static Rectangle StopButtonRect()    => new Rectangle(620, 315, 130, 46);
+    private static Rectangle SpinButtonRect()    => new Rectangle(390, 337, 140, 46);
+    private static Rectangle AllInButtonRect()   => new Rectangle(540, 337, 110, 46);
+    private static Rectangle StopButtonRect()    => new Rectangle(660, 337, 120, 46);
     private static Rectangle RestartButtonRect() => new Rectangle((W - 200) / 2f, H / 2f + 50, 200, 50);
     private static Rectangle BetFieldRect()      => new Rectangle(W - 185f, 89f, 135f, 36f);
 
-    // ── Symbool-helpers ───────────────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static Color SymbolColor(Symbol sym) => sym.Color switch
     {
@@ -394,7 +494,7 @@ public class SlotMachineGame
         _              => Color.White
     };
 
-    private static string SymbolText(Symbol sym) => sym.Glyph switch
+    private static string SymbolFallbackText(Symbol sym) => sym.Glyph switch
     {
         "🍒" => "KERS",
         "🍋" => "CITR",
@@ -403,11 +503,6 @@ public class SlotMachineGame
         "💎" => "DIA",
         _    => "???"
     };
-
-    private static Color DimColor(Color c, float f) =>
-        new Color((byte)(c.R * f), (byte)(c.G * f), (byte)(c.B * f), (byte)255);
-
-    private Symbol RandomSymbol() => Symbol.All[_rng.Next(Symbol.All.Length)];
 
     private static bool Hit(Vector2 m, Rectangle r) =>
         Raylib.CheckCollisionPointRec(m, r);
