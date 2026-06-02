@@ -34,6 +34,7 @@ public class SlotMachineGame
     private double[] _brakeTime    = [0.0, 0.0, 0.0];
 
     private bool _spinning;
+    private bool _rigged;
     private double _spinStart;
     private double _lastTime;
 
@@ -93,6 +94,7 @@ public class SlotMachineGame
         HandleBetInput();
         HandleAnimation(now, dt);
         HandleClicks();
+        HandleSpaceCheat();
     }
 
     private void HandleBetInput()
@@ -170,6 +172,15 @@ public class SlotMachineGame
         _brakeTime[i] = now;
     }
 
+    private void HandleSpaceCheat()
+    {
+        if (Raylib.IsKeyPressed(KeyboardKey.Space) && !_spinning && !_gameOver)
+        {
+            _rigged = true;
+            TrySpin();
+        }
+    }
+
     private void HandleClicks()
     {
         if (!Raylib.IsMouseButtonPressed(MouseButton.Left)) return;
@@ -197,7 +208,10 @@ public class SlotMachineGame
         _currentBet    = bet;
         _balance      -= bet;
         _betFocused    = false;
-        _pendingPayout = _machine.SpinAndCalculate(bet);
+        _pendingPayout = _rigged
+            ? _machine.SpinRiggedAndCalculate(bet)
+            : _machine.SpinAndCalculate(bet);
+        _rigged        = false;
         _finalSymbols  = _machine.CurrentSymbols;
         _spinning      = true;
         _spinStart     = Raylib.GetTime();

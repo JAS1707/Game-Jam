@@ -31,6 +31,8 @@ public class Wheel
         return CurrentSymbol;
     }
 
+    public void ForceSymbol(Symbol s) => CurrentSymbol = s;
+
     /// <summary>
     /// Kiest een willekeurig symbool uit alle beschikbare symbolen, gewogen op basis van Weight.
     /// </summary>

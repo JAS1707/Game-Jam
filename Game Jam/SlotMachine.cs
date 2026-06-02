@@ -25,6 +25,13 @@ public class SlotMachine
         return CalculatePayout(bet);
     }
 
+    public int SpinRiggedAndCalculate(int bet)
+    {
+        foreach (var wheel in _wheels)
+            wheel.ForceSymbol(Symbol.Diamond);
+        return CalculatePayout(bet);
+    }
+
     /// <summary>
     /// Berekent de uitbetaling:
     /// 3× hetzelfde → inzet × symbool-multiplier;
