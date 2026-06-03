@@ -221,7 +221,11 @@ public class GreedGame
             if (_state.Balance <= v) continue;
             float cx = ChipX0 + i * ChipStep;
             if (!Raylib.CheckCollisionPointCircle(m, new Vector2(cx, ChipY), ChipR)) continue;
-            if (_state.Balance - CurrentBet >= v) _betChips.Add(v);
+            if (_state.Balance - CurrentBet >= v)
+            {
+                _betChips.Add(v);
+                if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.ChipClick);
+            }
             return;
         }
 
@@ -288,9 +292,12 @@ public class GreedGame
         _flipping[i] = true;
         _flipT[i]    = 0f;
 
+        if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.StoneFlip);
+
         if (_isBomb[i])
         {
             _hitBomb = true;
+            if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.BombBlast);
             SpawnBombParticles(i);
 
             // Onthul alle andere bommen ook
@@ -310,6 +317,7 @@ public class GreedGame
             _safeRevealed++;
             _winnings  = (float)Math.Ceiling(_winnings * MultiplierStep);
             _multPulse = 1f;
+            if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.CoinReveal);
             SpawnCoinSparkles(i);
 
             int safeTotal = StoneCount - BombCount;
@@ -334,6 +342,7 @@ public class GreedGame
     {
         _state.Balance += (int)_winnings;
         _cashedOut      = true;
+        if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.CashOut);
         int profit      = (int)_winnings - _bet;
         SetStatus($"Uitbetaald!  +{(int)_winnings} munten  (winst: {profit:+#;-#;0})", StatusKind.Win);
         // Toon de rest van de stenen

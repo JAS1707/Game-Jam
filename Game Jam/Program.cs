@@ -15,6 +15,8 @@ GameChoice       active        = GameChoice.None;
 Raylib.SetConfigFlags(ConfigFlags.ResizableWindow);
 Raylib.InitWindow(W, H, "Game Jam");
 Raylib.SetTargetFPS(60);
+Raylib.InitAudioDevice();
+globalState.Sounds = new SoundBank();
 
 RenderTexture2D canvas = Raylib.LoadRenderTexture(W, H);
 
@@ -107,6 +109,8 @@ while (!Raylib.WindowShouldClose())
 }
 
 Raylib.UnloadRenderTexture(canvas);
+globalState.Sounds?.Dispose();
+Raylib.CloseAudioDevice();
 Raylib.CloseWindow();
 
 static void ToggleFullscreen(int w, int h)

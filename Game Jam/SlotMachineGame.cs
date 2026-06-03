@@ -59,6 +59,7 @@ public class SlotMachineGame
     private double _riggedUntil;
     private double _spinStart;
     private double _lastTime;
+    private double _lastSpinTick;
 
     private readonly SlotMachine _machine = new(SlotCount);
 
@@ -147,6 +148,13 @@ public class SlotMachineGame
     {
         if (!_spinning) return;
 
+        // Continu draaigeluid: speel korte tik telkens als de vorige klaar is
+        if (now - _lastSpinTick > 0.038 && !Raylib.IsSoundPlaying(_state.Sounds?.SpinTick ?? default))
+        {
+            _lastSpinTick = now;
+            if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.SpinTick);
+        }
+
         double elapsed     = now - _spinStart;
         double[] stopTimes = new double[SlotCount];
         for (int i = 0; i < SlotCount; i++)
@@ -166,6 +174,7 @@ public class SlotMachineGame
                 if (t >= 1f)
                 {
                     _wheelLanded[i] = true;
+                    if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.GetReelStop(i));
                     if (_wheelLanded.All(l => l)) { _spinning = false; FinishSpin(); }
                 }
             }
@@ -318,12 +327,14 @@ public class SlotMachineGame
         if (_state.Balance <= 0)
         {
             _gameOver = true;
+            if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.LoseTone);
             SetStatus("GAME OVER!  U heeft geen munten meer.", StatusKind.Lose);
             return;
         }
 
         if (_pendingPayout == 0)
         {
+            if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.LoseTone);
             SetStatus($"Helaas! Geen match. -{_currentBet} munten.", StatusKind.Lose);
             return;
         }
@@ -332,6 +343,8 @@ public class SlotMachineGame
         string sign = profit >= 0 ? $"+{profit}" : $"{profit}";
 
         bool jackpot = _finalSymbols!.All(s => s == _finalSymbols[0]);
+        if (_state.Sounds != null)
+            Raylib.PlaySound(jackpot ? _state.Sounds.Jackpot : _state.Sounds.WinChime);
         string tag;
         if (jackpot)
         {

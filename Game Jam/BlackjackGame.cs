@@ -250,7 +250,11 @@ public class BlackjackGame
             if (_state.Balance <= v) continue;
             float cx = BJChipX0 + i * BJChipStep, cy = BJChipY;
             if (!Raylib.CheckCollisionPointCircle(m, new Vector2(cx, cy), BJChipR)) continue;
-            if (_state.Balance - CurrentBet >= v) _betChips.Add(v);
+            if (_state.Balance - CurrentBet >= v)
+            {
+                _betChips.Add(v);
+                if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.ChipClick);
+            }
             return;
         }
         if (Hit(m, AllInButtonRect()))                         { AllIn();            return; }
@@ -298,6 +302,8 @@ public class BlackjackGame
         _hands[0].Add(_deck.Deal());
         _dealerHand.Add(_deck.Deal(faceDown: true));   // dealer hole card
 
+        if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.CardDeal);
+
         _bjState = BjState.PlayerTurn;
         CheckInitialBlackjack();
     }
@@ -341,6 +347,7 @@ public class BlackjackGame
     private void PlayerHit()
     {
         _hands[_activeHand].Add(_deck.Deal());
+        if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.CardDeal);
         int v = HandValue(_hands[_activeHand]);
         if (v > 21)
         {
@@ -472,6 +479,9 @@ public class BlackjackGame
         }
 
         BuildResultStatus(dealerVal, dealerBust);
+        bool anyWin2 = _handLabel.Any(l => l is "WIN" or "BLACKJACK!");
+        if (_state.Sounds != null)
+            Raylib.PlaySound(anyWin2 ? _state.Sounds.WinChime : _state.Sounds.LoseTone);
         _bjState = BjState.Result;
     }
 

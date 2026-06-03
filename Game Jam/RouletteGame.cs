@@ -90,6 +90,7 @@ public class RouletteGame
 
     // Dealer-timing (resultaat tonen na animatie)
     private double _lastTime;
+    private double _lastBallTick;
 
     // Status
     private string     _statusMsg  = "Kies chips, klik een vakje en druk DRAAIEN.";
@@ -216,6 +217,14 @@ public class RouletteGame
         _ballAngle -= ballSpeed * dt;
         if (_ballAngle < 0f) _ballAngle += 360f;
 
+        // Balletje-tik: snel aan het begin, langzamer naarmate de bal vertraagt
+        double tickInterval = 0.025 + 0.18 * Math.Min(1.0, elapsed / dur);
+        if (now - _lastBallTick >= tickInterval)
+        {
+            _lastBallTick = now;
+            if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.BallTick);
+        }
+
         if (t >= 1.0f)
         {
             _rState = RState.Result;
@@ -225,10 +234,11 @@ public class RouletteGame
 
     private void LandBall()
     {
-        int n    = WheelOrder.Length;
+        int n     = WheelOrder.Length;
         float seg = 360f / n;
-        int idx  = (int)((_ballAngle % 360f + 360f) / seg) % n;
-        _result  = WheelOrder[idx];
+        int idx   = (int)((_ballAngle % 360f + 360f) / seg) % n;
+        _result   = WheelOrder[idx];
+        if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.BallLand);
         ResolveBets();
     }
 
@@ -343,6 +353,7 @@ public class RouletteGame
         }
         entry.Chips.Add(val);
         _betChips.Add(val);   // voor toren-weergave
+        if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.ChipClick);
     }
 
     private void DoAllIn()
@@ -445,9 +456,13 @@ public class RouletteGame
         }
 
         if (paid == 0)
+        {
+            if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.LoseTone);
             SetStatus($"Getal: {n} ({kleur}) — Helaas, geen winst. -{spent} munten.", StatusKind.Lose);
+        }
         else
         {
+            if (_state.Sounds != null) Raylib.PlaySound(_state.Sounds.WinChime);
             string sign = profit >= 0 ? $"+{profit}" : $"{profit}";
             SetStatus($"Getal: {n} ({kleur}) — Uitbetaling: {paid} ({sign} munten).", StatusKind.Win);
         }
