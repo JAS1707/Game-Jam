@@ -370,8 +370,7 @@ public class SlotMachineGame
 
     public void Draw()
     {
-        DrawTitle();
-        DrawScoreBar();
+        DrawHeader();
         DrawWheels();
         DrawPayTable();
         DrawBetTower();
@@ -382,17 +381,23 @@ public class SlotMachineGame
         if (_gameOver) DrawGameOverOverlay();
     }
 
-    private static void DrawTitle()
+    private void DrawHeader()
     {
-        const string title = "SLOT  MACHINE";
-        int tw = Raylib.MeasureText(title, 52);
-        Raylib.DrawText(title, (W - tw) / 2, 16, 52, Color.Gold);
-        Raylib.DrawRectangle(40, 78, W - 80, 2, new Color(80, 70, 20, 255));
-    }
+        // Donkere achtergrondstrook
+        Raylib.DrawRectangle(0, 0, W, AppTheme.HeaderH, AppTheme.BgHeader);
+        Raylib.DrawRectangle(0, AppTheme.HeaderH, W, 2, AppTheme.Separator);
 
-    private void DrawScoreBar()
-    {
-        Raylib.DrawText($"Saldo:  {_state.Balance}", 50, 94, 22, Color.White);
+        // Spelnaam — links
+        const string name = "SLOT MACHINE";
+        Raylib.DrawText(name, 14, (AppTheme.HeaderH - 26) / 2, 26, AppTheme.AccentGold);
+
+        // Saldo — midden
+        string balTxt = $"Saldo:  {_state.Balance}  munten";
+        int bw = Raylib.MeasureText(balTxt, 18);
+        Raylib.DrawText(balTxt, (W - bw) / 2, (AppTheme.HeaderH - 18) / 2, 18, AppTheme.TextPrimary);
+
+        // Terugknop — rechts
+        DrawButton(MenuButtonRect(), "← TERUG", !_spinning, AppTheme.BtnBack);
     }
 
     private void DrawWheels()
@@ -468,8 +473,8 @@ public class SlotMachineGame
     private void DrawPayTable()
     {
         int tx = 30, ty = 345;
-        Raylib.DrawText("Uitbetalingen:", tx, ty, 16, Color.Gray);
-        ty += 22;
+        Raylib.DrawText("Uitbetalingen:", tx, ty, 16, AppTheme.TextMuted);
+        ty += 24;
 
         foreach (var sym in Symbol.All)
         {
@@ -480,13 +485,13 @@ public class SlotMachineGame
             if (_fontLoaded)
             {
                 Raylib.DrawTextEx(_emojiFont, sym.Glyph, new Vector2(tx, ty), 18f, 1f, c);
-                Raylib.DrawText($"  {SlotCount}x=x{mult} {SlotCount - 1}x=x{swMult}", tx + 24, ty + 2, 14, c);
+                Raylib.DrawText($"  {SlotCount}x = x{mult}   {SlotCount - 1}x = x{swMult}", tx + 24, ty + 2, 14, c);
             }
             else
             {
-                Raylib.DrawText($"{SymbolFallbackText(sym),-4} {SlotCount}x=x{mult} {SlotCount-1}x=x{swMult}", tx, ty, 14, c);
+                Raylib.DrawText($"{SymbolFallbackText(sym),-4}  {SlotCount}x=x{mult}  {SlotCount-1}x=x{swMult}", tx, ty, 14, c);
             }
-            ty += 20;
+            ty += 22;
         }
     }
 
@@ -678,35 +683,35 @@ public class SlotMachineGame
     {
         Color c = _statusKind switch
         {
-            StatusKind.Win  => Color.Yellow,
-            StatusKind.Lose => Color.Red,
-            _               => new Color(180, 180, 180, 255)
+            StatusKind.Win  => AppTheme.StatusWin,
+            StatusKind.Lose => AppTheme.StatusLose,
+            _               => AppTheme.StatusNeutral
         };
-        int fs = 20;
+        const int fs = 20;
         int tw = Raylib.MeasureText(_statusMsg, fs);
         Raylib.DrawText(_statusMsg, Math.Max(30, (W - tw) / 2), 548, fs, c);
     }
 
     private static void DrawHint()
     {
-        const string hint = "F11: volledig scherm  |  Esc: menu  |  klik toren: verwijder chip";
-        int hw = Raylib.MeasureText(hint, 11);
-        Raylib.DrawText(hint, W - hw - 6, H - 16, 11, new Color(50, 50, 50, 255));
+        const string hint = "F11: volledig scherm  |  Esc: menu  |  Klik op de toren om een chip te verwijderen";
+        int hw = Raylib.MeasureText(hint, 14);
+        Raylib.DrawText(hint, Math.Max(6, (W - hw) / 2), H - 20, 14, AppTheme.TextHint);
     }
 
     private void DrawGameOverOverlay()
     {
-        Raylib.DrawRectangle(0, 0, W, H, new Color(0, 0, 0, 170));
+        Raylib.DrawRectangle(0, 0, W, H, AppTheme.BgOverlay);
 
         const string title = "GAME  OVER";
         int tw = Raylib.MeasureText(title, 72);
-        Raylib.DrawText(title, (W - tw) / 2, H / 2 - 110, 72, Color.Red);
+        Raylib.DrawText(title, (W - tw) / 2, H / 2 - 110, 72, AppTheme.AccentDanger);
 
         const string sub = "U heeft geen munten meer.";
         int sw = Raylib.MeasureText(sub, 26);
-        Raylib.DrawText(sub, (W - sw) / 2, H / 2 - 20, 26, Color.White);
+        Raylib.DrawText(sub, (W - sw) / 2, H / 2 - 20, 26, AppTheme.TextPrimary);
 
-        DrawButton(RestartButtonRect(), "OPNIEUW SPELEN", true, Color.DarkGreen);
+        DrawButton(RestartButtonRect(), "OPNIEUW SPELEN", true, AppTheme.BtnPrimary);
     }
 
     private void DrawButton(Rectangle rect, string label, bool enabled, Color normalBg)
@@ -745,7 +750,7 @@ public class SlotMachineGame
     private static Rectangle AllInButtonRect()   => new Rectangle(496f, 510f,  90f, 34f);
     private static Rectangle ClearButtonRect()   => new Rectangle(594f, 510f, 100f, 34f);
     private static Rectangle RestartButtonRect() => new Rectangle((W - 200) / 2f, H / 2f + 50, 200, 50);
-    private static Rectangle MenuButtonRect()    => new Rectangle(10f, 10f, 90f, 36f);
+    private static Rectangle MenuButtonRect()    => new Rectangle(W - 106f, 8f, 96f, 32f);
     private static Rectangle TowerRect()         => new Rectangle(272f, 338f, 66f, 160f);
 
     // ── Helpers ───────────────────────────────────────────────────────────────

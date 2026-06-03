@@ -476,8 +476,7 @@ public class RouletteGame
 
     public void Draw()
     {
-        DrawTitle();
-        DrawScoreBar();
+        DrawHeader();
         DrawWheel();
         DrawTable();
         DrawChipBar();
@@ -488,19 +487,25 @@ public class RouletteGame
         if (_gameOver) DrawGameOverOverlay();
     }
 
-    private static void DrawTitle()
+    private void DrawHeader()
     {
-        const string t = "ROULETTE";
-        int tw = Raylib.MeasureText(t, 48);
-        Raylib.DrawText(t, (W - tw) / 2, 8, 48, Color.Gold);
-        Raylib.DrawRectangle(40, 62, W - 80, 2, new Color(80, 70, 20, 255));
-    }
+        // Donkere achtergrondstrook
+        Raylib.DrawRectangle(0, 0, W, AppTheme.HeaderH, AppTheme.BgHeader);
+        Raylib.DrawRectangle(0, AppTheme.HeaderH, W, 2, AppTheme.Separator);
 
-    private void DrawScoreBar()
-    {
-        Raylib.DrawText($"Saldo:  {_state.Balance}", 110, 70, 20, Color.White);
-        if (TotalBet > 0)
-            Raylib.DrawText($"Inzet: {TotalBet}", 110, 92, 15, Color.Yellow);
+        // Spelnaam — links
+        const string name = "ROULETTE";
+        Raylib.DrawText(name, 14, (AppTheme.HeaderH - 26) / 2, 26, AppTheme.AccentGold);
+
+        // Saldo & totale inzet — midden
+        string balTxt = TotalBet > 0
+            ? $"Saldo:  {_state.Balance}  munten  |  Inzet: {TotalBet}"
+            : $"Saldo:  {_state.Balance}  munten";
+        int bw = Raylib.MeasureText(balTxt, 16);
+        Raylib.DrawText(balTxt, (W - bw) / 2, (AppTheme.HeaderH - 16) / 2, 16, AppTheme.TextPrimary);
+
+        // Terugknop — rechts
+        DrawButton(MenuButtonRect(), "← TERUG", _rState != RState.Spinning, AppTheme.BtnBack);
     }
 
     // ── Roulettewiel ─────────────────────────────────────────────────────────
@@ -751,8 +756,8 @@ public class RouletteGame
 
         Raylib.DrawRectangle((int)x, (int)y, (int)w, (int)h, bg);
         Raylib.DrawRectangleLines((int)x, (int)y, (int)w, (int)h, new Color(60, 60, 60, 255));
-        string lbl = red ? "R" : "Z";
-        int fs = 11, tw = Raylib.MeasureText(lbl, fs);
+        string lbl = red ? "ROOD" : "ZWART";
+        int fs = 9, tw = Raylib.MeasureText(lbl, fs);
         bool lit = bg.R > 150 && bg.G > 150;
         Raylib.DrawText(lbl, (int)(x + (w - tw) / 2), (int)(y + (h - fs) / 2), fs,
             lit ? Color.Black : Color.White);
@@ -790,7 +795,7 @@ public class RouletteGame
         int rows = (ChipValues.Length + perRow - 1) / perRow;
         float startX = WCX - ((perRow - 1) * ChipStepX) / 2f;
         float topY = ChipY - (rows - 1) * ChipStepY;
-        Raylib.DrawText("Chipwaarde:", (int)startX, (int)(topY - 20f), 12, new Color(130, 130, 130, 255));
+        Raylib.DrawText("Chipwaarde:", (int)startX, (int)(topY - 22f), 14, AppTheme.TextLabel);
 
         for (int i = 0; i < ChipValues.Length; i++)
         {
@@ -907,31 +912,32 @@ public class RouletteGame
     {
         Color c = _statusKind switch
         {
-            StatusKind.Win  => Color.Yellow,
-            StatusKind.Lose => Color.Red,
-            _               => new Color(200, 200, 200, 255)
+            StatusKind.Win  => AppTheme.StatusWin,
+            StatusKind.Lose => AppTheme.StatusLose,
+            _               => AppTheme.StatusNeutral
         };
-        int sw2 = Raylib.MeasureText(_statusMsg, 16);
-        Raylib.DrawText(_statusMsg, Math.Max(10, (W - sw2) / 2), 542, 16, c);
+        const int fs = 16;
+        int sw2 = Raylib.MeasureText(_statusMsg, fs);
+        Raylib.DrawText(_statusMsg, Math.Max(10, (W - sw2) / 2), 542, fs, c);
     }
 
     private static void DrawHint()
     {
-        const string h = "F11: volledig scherm  |  Esc: menu  |  Enter: draaien/nieuw spel";
-        int hw = Raylib.MeasureText(h, 10);
-        Raylib.DrawText(h, W - hw - 4, H - 13, 10, new Color(50, 50, 50, 255));
+        const string h = "F11: volledig scherm  |  Esc: menu  |  Enter: draaien / nieuw spel";
+        int hw = Raylib.MeasureText(h, 14);
+        Raylib.DrawText(h, Math.Max(4, (W - hw) / 2), H - 20, 14, AppTheme.TextHint);
     }
 
     private void DrawGameOverOverlay()
     {
-        Raylib.DrawRectangle(0, 0, W, H, new Color(0, 0, 0, 170));
+        Raylib.DrawRectangle(0, 0, W, H, AppTheme.BgOverlay);
         const string t = "GAME  OVER";
         int tw = Raylib.MeasureText(t, 72);
-        Raylib.DrawText(t, (W - tw) / 2, H / 2 - 110, 72, Color.Red);
+        Raylib.DrawText(t, (W - tw) / 2, H / 2 - 110, 72, AppTheme.AccentDanger);
         const string sub = "U heeft geen munten meer.";
         int sw = Raylib.MeasureText(sub, 26);
-        Raylib.DrawText(sub, (W - sw) / 2, H / 2 - 20, 26, Color.White);
-        DrawButton(RestartButtonRect(), "OPNIEUW SPELEN", true, Color.DarkGreen);
+        Raylib.DrawText(sub, (W - sw) / 2, H / 2 - 20, 26, AppTheme.TextPrimary);
+        DrawButton(RestartButtonRect(), "OPNIEUW SPELEN", true, AppTheme.BtnPrimary);
     }
 
     private void DrawButton(Rectangle rect, string label, bool enabled, Color normalBg)
@@ -952,7 +958,7 @@ public class RouletteGame
 
     // ── Rechthoeken ───────────────────────────────────────────────────────────
 
-    private static Rectangle MenuButtonRect()     => new Rectangle(10f,  10f,  90f,  30f);
+    private static Rectangle MenuButtonRect()     => new Rectangle(W - 106f, 8f, 96f, 32f);
     private static Rectangle SpinButtonRect()     => new Rectangle(560f, 460f, 110f, 34f);
     private static Rectangle ClearButtonRect()    => new Rectangle(560f, 500f, 110f, 34f);
     private static Rectangle AllInButtonRect()    => new Rectangle(678f, 460f,  90f, 74f);

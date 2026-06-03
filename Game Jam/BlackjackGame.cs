@@ -521,7 +521,7 @@ public class BlackjackGame
     public void Draw()
     {
         DrawBackground();
-        DrawTitleBar();
+        DrawHeader();
         DrawDealerArea();
         DrawPlayerArea();
         DrawBetArea();
@@ -531,22 +531,27 @@ public class BlackjackGame
 
     private static void DrawBackground()
     {
-        // Groene casino-tafel achtergrond
+        // Groene casino-tafel achtergrond (volledig scherm)
         Raylib.DrawRectangle(0, 0, W, H, new Color(22, 90, 40, 255));
-        Raylib.DrawRectangle(0, 0, W, 52, new Color(10, 10, 20, 220));
     }
 
-    private void DrawTitleBar()
+    private void DrawHeader()
     {
-        const string title = "BLACKJACK";
-        int tw = Raylib.MeasureText(title, 32);
-        Raylib.DrawText(title, (W - tw) / 2, 10, 32, Color.Gold);
+        // Donkere achtergrondstrook
+        Raylib.DrawRectangle(0, 0, W, AppTheme.HeaderH, AppTheme.BgHeader);
+        Raylib.DrawRectangle(0, AppTheme.HeaderH, W, 2, AppTheme.Separator);
 
-        DrawButton(MenuButtonRect(), "← MENU", true, new Color(50, 50, 90, 255));
+        // Spelnaam — links
+        const string name = "BLACKJACK";
+        Raylib.DrawText(name, 14, (AppTheme.HeaderH - 26) / 2, 26, AppTheme.AccentGold);
 
-        string balStr = $"Saldo: {_state.Balance}";
-        int bw = Raylib.MeasureText(balStr, 18);
-        Raylib.DrawText(balStr, W - bw - 10, 17, 18, Color.White);
+        // Saldo — midden
+        string balTxt = $"Saldo:  {_state.Balance}  munten";
+        int bw = Raylib.MeasureText(balTxt, 18);
+        Raylib.DrawText(balTxt, (W - bw) / 2, (AppTheme.HeaderH - 18) / 2, 18, AppTheme.TextPrimary);
+
+        // Terugknop — rechts
+        DrawButton(MenuButtonRect(), "← TERUG", true, AppTheme.BtnBack);
     }
 
     private void DrawDealerArea()
@@ -790,12 +795,13 @@ public class BlackjackGame
     {
         Color c = _statusKind switch
         {
-            StatusKind.Win  => Color.Yellow,
-            StatusKind.Lose => Color.Red,
-            _               => new Color(200, 200, 200, 255)
+            StatusKind.Win  => AppTheme.StatusWin,
+            StatusKind.Lose => AppTheme.StatusLose,
+            _               => AppTheme.StatusNeutral
         };
-        int sw = Raylib.MeasureText(_statusMsg, 18);
-        Raylib.DrawText(_statusMsg, Math.Max(10, (W - sw) / 2), 552, 18, c);
+        const int fs = 18;
+        int sw = Raylib.MeasureText(_statusMsg, fs);
+        Raylib.DrawText(_statusMsg, Math.Max(10, (W - sw) / 2), 552, fs, c);
     }
 
     // ── Kaart-tekening ────────────────────────────────────────────────────────
@@ -936,7 +942,7 @@ public class BlackjackGame
 
     // ── Rechthoeken ───────────────────────────────────────────────────────────
 
-    private static Rectangle MenuButtonRect()  => new Rectangle(10f,  10f,  90f, 30f);
+    private static Rectangle MenuButtonRect()  => new Rectangle(W - 106f, 8f, 96f, 32f);
     private static Rectangle DealButtonRect()  => new Rectangle(310f, 460f, 110f, 36f);
     private static Rectangle AllInButtonRect() => new Rectangle(428f, 460f,  90f, 36f);
     private static Rectangle HitButtonRect()   => new Rectangle(155f, 460f,  85f, 36f);

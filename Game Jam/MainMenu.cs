@@ -36,27 +36,32 @@ public class MainMenu
 
     public void Draw()
     {
+        // ── Titel ─────────────────────────────────────────────────────────────
         const string title = "GAME  JAM";
         int tw = Raylib.MeasureText(title, 72);
-        Raylib.DrawText(title, (W - tw) / 2, 80, 72, Color.Gold);
-        Raylib.DrawRectangle(80, 170, W - 160, 2, new Color(80, 70, 20, 255));
+        Raylib.DrawText(title, (W - tw) / 2, 68, 72, AppTheme.AccentGold);
+        Raylib.DrawRectangle(60, 152, W - 120, 2, AppTheme.SepAccent);
 
-        string balTxt = $"Saldo:  {_state.Balance} munten";
+        // ── Saldo ─────────────────────────────────────────────────────────────
+        string balTxt = $"Saldo:  {_state.Balance}  munten";
         int bw = Raylib.MeasureText(balTxt, 22);
-        Raylib.DrawText(balTxt, (W - bw) / 2, 196, 22, Color.White);
+        Raylib.DrawText(balTxt, (W - bw) / 2, 168, 22, AppTheme.TextPrimary);
 
+        // ── Subtitel ──────────────────────────────────────────────────────────
         const string sub = "Kies een spel:";
-        int cw = Raylib.MeasureText(sub, 22);
-        Raylib.DrawText(sub, (W - cw) / 2, 248, 22, new Color(160, 160, 160, 255));
+        int sw = Raylib.MeasureText(sub, 18);
+        Raylib.DrawText(sub, (W - sw) / 2, 212, 18, AppTheme.TextSecondary);
 
-        DrawMenuButton(SlotsButtonRect(),     "SLOT MACHINE", new Color(30, 100, 30,  255));
-        DrawMenuButton(BlackjackButtonRect(), "BLACKJACK",    new Color(80, 20,  20,  255));
-        DrawMenuButton(RouletteButtonRect(),  "ROULETTE",     new Color(20, 40,  110, 255));
-        DrawMenuButton(GreedButtonRect(),     "GREED",        new Color(130, 90, 10,  255));
+        // ── Spelknoppen — 4 stuks, gelijkmatig gespreid ───────────────────────
+        DrawMenuButton(SlotsButtonRect(),     "🎰  SLOT MACHINE", new Color(28,  95, 28,  255));
+        DrawMenuButton(BlackjackButtonRect(), "♠   BLACKJACK",    new Color(75,  18, 18,  255));
+        DrawMenuButton(RouletteButtonRect(),  "⚫  ROULETTE",     new Color(18,  38, 105, 255));
+        DrawMenuButton(GreedButtonRect(),     "💣  GREED",        new Color(120, 82,  8,  255));
 
-        const string hint = "F11: volledig scherm";
-        int hw = Raylib.MeasureText(hint, 12);
-        Raylib.DrawText(hint, W - hw - 8, H - 18, 12, new Color(55, 55, 55, 255));
+        // ── Hints onderaan ────────────────────────────────────────────────────
+        const string hint = "F11: volledig scherm  |  Esc: menu";
+        int hw = Raylib.MeasureText(hint, 14);
+        Raylib.DrawText(hint, (W - hw) / 2, H - 22, 14, AppTheme.TextHint);
     }
 
     private void DrawMenuButton(Rectangle rect, string label, Color bgColor)
@@ -64,23 +69,25 @@ public class MainMenu
         Vector2 m  = CanvasMouse();
         bool hover = Hit(m, rect);
 
-        Color bg = hover ? Color.Yellow : bgColor;
-        Color fg = hover ? Color.Black  : Color.White;
+        Color bg   = hover ? AppTheme.BtnHover : bgColor;
+        Color fg   = hover ? Color.Black       : AppTheme.TextPrimary;
+        Color bord = hover ? AppTheme.BtnHover : AppTheme.BorderActive;
 
         Raylib.DrawRectangleRec(rect, bg);
-        Raylib.DrawRectangleLinesEx(rect, 2, Color.White);
+        Raylib.DrawRectangleLinesEx(rect, 2, bord);
 
-        int lw = Raylib.MeasureText(label, 24);
+        int lw = Raylib.MeasureText(label, 22);
         Raylib.DrawText(label,
             (int)(rect.X + (rect.Width  - lw) / 2),
-            (int)(rect.Y + (rect.Height - 24) / 2),
-            24, fg);
+            (int)(rect.Y + (rect.Height - 22) / 2),
+            22, fg);
     }
 
-    private static Rectangle SlotsButtonRect()     => new Rectangle((W - 300) / 2f, 270, 300, 52);
-    private static Rectangle BlackjackButtonRect() => new Rectangle((W - 300) / 2f, 332, 300, 52);
-    private static Rectangle RouletteButtonRect()  => new Rectangle((W - 300) / 2f, 394, 300, 52);
-    private static Rectangle GreedButtonRect()     => new Rectangle((W - 300) / 2f, 456, 300, 52);
+    // ── Knop-rechthoeken: 300 × 52 px, gecentreerd, 12 px tussenruimte ────────
+    private static Rectangle SlotsButtonRect()     => new Rectangle((W - 300) / 2f, 244, 300, 52);
+    private static Rectangle BlackjackButtonRect() => new Rectangle((W - 300) / 2f, 308, 300, 52);
+    private static Rectangle RouletteButtonRect()  => new Rectangle((W - 300) / 2f, 372, 300, 52);
+    private static Rectangle GreedButtonRect()     => new Rectangle((W - 300) / 2f, 436, 300, 52);
 
     private Vector2 CanvasMouse()
     {

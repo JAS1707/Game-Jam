@@ -425,7 +425,7 @@ public class GreedGame
     public void Draw()
     {
         DrawBackground();
-        DrawTitleBar();
+        DrawHeader();
         DrawGrid();
         DrawParticles();
         DrawSparkles();
@@ -439,23 +439,26 @@ public class GreedGame
         Raylib.DrawRectangle(0, 0, W, H, new Color(12, 16, 30, 255));
         foreach (var (sx, sy, a) in BgStars)
             Raylib.DrawCircleV(new Vector2(sx, sy), 1f, new Color(255, 255, 255, (int)a));
-        // Donkere titelbalk
-        Raylib.DrawRectangle(0, 0, W, 50, new Color(6, 6, 16, 220));
-        // Subtiele goudkleurige gloed bovenaan
-        Raylib.DrawRectangleGradientV(0, 0, W, 50, new Color(80, 60, 0, 18), new Color(0, 0, 0, 0));
     }
 
-    private void DrawTitleBar()
+    private void DrawHeader()
     {
-        const string title = "GREED";
-        int tw = Raylib.MeasureText(title, 38);
-        Raylib.DrawText(title, (W - tw) / 2, 7, 38, new Color(255, 200, 0, 255));
+        // Donkere achtergrondstrook
+        Raylib.DrawRectangle(0, 0, W, AppTheme.HeaderH, AppTheme.BgHeader);
+        Raylib.DrawRectangleGradientV(0, 0, W, AppTheme.HeaderH, new Color(80, 60, 0, 22), new Color(0, 0, 0, 0));
+        Raylib.DrawRectangle(0, AppTheme.HeaderH, W, 2, AppTheme.Separator);
 
-        DrawButton(MenuButtonRect(), "← MENU", true, new Color(50, 50, 90, 255));
+        // Spelnaam — links
+        const string name = "GREED";
+        Raylib.DrawText(name, 14, (AppTheme.HeaderH - 26) / 2, 26, AppTheme.AccentGold);
 
-        string bal = $"Saldo: {_state.Balance}";
-        int bw = Raylib.MeasureText(bal, 18);
-        Raylib.DrawText(bal, W - bw - 10, 16, 18, Color.White);
+        // Saldo — midden
+        string balTxt = $"Saldo:  {_state.Balance}  munten";
+        int bw = Raylib.MeasureText(balTxt, 18);
+        Raylib.DrawText(balTxt, (W - bw) / 2, (AppTheme.HeaderH - 18) / 2, 18, AppTheme.TextPrimary);
+
+        // Terugknop — rechts (alleen in bettingmodus)
+        DrawButton(MenuButtonRect(), "← TERUG", _gState == GState.Betting, AppTheme.BtnBack);
     }
 
     private void DrawGrid()
@@ -636,14 +639,14 @@ public class GreedGame
         DrawButton(AllInButtonRect(), "ALL IN",  _state.Balance > 0,  new Color(140, 20, 20, 255));
         DrawButton(ClearButtonRect(), "WISSEN",  _betChips.Count > 0, new Color(110, 50, 15, 255));
 
-        string betStr = CurrentBet > 0 ? $"Inzet: {CurrentBet}" : "Selecteer je inzet";
-        Color  betCol = CurrentBet > 0 ? Color.Yellow : new Color(80, 80, 80, 255);
-        int btw = Raylib.MeasureText(betStr, 14);
-        Raylib.DrawText(betStr, (W - btw) / 2, 504, 14, betCol);
+        string betStr = CurrentBet > 0 ? $"Inzet: {CurrentBet} munten" : "Selecteer je inzet";
+        Color  betCol = CurrentBet > 0 ? AppTheme.AccentWarn : AppTheme.TextMuted;
+        int btw = Raylib.MeasureText(betStr, 16);
+        Raylib.DrawText(betStr, (W - btw) / 2, 502, 16, betCol);
 
-        const string hint = "Elk veilig steen × 1,1 afgerond ↑  |  5 bommen verborgen";
-        int hw = Raylib.MeasureText(hint, 12);
-        Raylib.DrawText(hint, (W - hw) / 2, 522, 12, new Color(80, 80, 80, 255));
+        const string hint = "Elk veilig steen × 1,1 afgerond naar boven  |  5 bommen verborgen";
+        int hw = Raylib.MeasureText(hint, 14);
+        Raylib.DrawText(hint, Math.Max(6, (W - hw) / 2), 522, 14, AppTheme.TextMuted);
     }
 
     private void DrawPlayingPanel()
@@ -674,8 +677,8 @@ public class GreedGame
         // Uitbetalingsknop
         DrawButton(CashOutButtonRect(), $"UITBETALEN  +{(int)_winnings}", true, new Color(20, 120, 45, 255));
 
-        string infoStr = $"Inzet: {_bet}  |  {BombCount} bommen";
-        Raylib.DrawText(infoStr, 28, 506, 13, new Color(130, 130, 130, 255));
+        string infoStr = $"Inzet: {_bet} munten  |  {BombCount} bommen verborgen";
+        Raylib.DrawText(infoStr, 28, 506, 14, AppTheme.TextMuted);
     }
 
     // ── Chip-weergave ─────────────────────────────────────────────────────────
@@ -742,8 +745,8 @@ public class GreedGame
         const float rH = 22f, rV = 6f, step = 10f;
         const int   maxVis = 7;
 
-        Raylib.DrawText("INZET", (int)(cx - Raylib.MeasureText("INZET", 11) / 2), 382, 11,
-            new Color(115, 115, 128, 255));
+        Raylib.DrawText("INZET", (int)(cx - Raylib.MeasureText("INZET", 14) / 2), 380, 14,
+            AppTheme.TextLabel);
 
         int count    = _betChips.Count;
         int startIdx = Math.Max(0, count - maxVis);
@@ -872,7 +875,7 @@ public class GreedGame
         return new Rectangle(x, y, StoneW, StoneH);
     }
 
-    private static Rectangle MenuButtonRect()    => new Rectangle(10f,  8f,  90f, 32f);
+    private static Rectangle MenuButtonRect()    => new Rectangle(W - 106f, 8f, 96f, 32f);
     private static Rectangle PlayButtonRect()    => new Rectangle(310f, 462f, 120f, 36f);
     private static Rectangle AllInButtonRect()   => new Rectangle(438f, 462f,  90f, 36f);
     private static Rectangle ClearButtonRect()   => new Rectangle(536f, 462f, 100f, 36f);
