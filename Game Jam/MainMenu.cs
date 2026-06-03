@@ -31,6 +31,7 @@ public class MainMenu
         if (Hit(m, SlotsButtonRect()))     SelectedGame = GameChoice.Slots;
         if (Hit(m, BlackjackButtonRect())) SelectedGame = GameChoice.Blackjack;
         if (Hit(m, RouletteButtonRect()))  SelectedGame = GameChoice.Roulette;
+        if (Hit(m, GreedButtonRect()))     SelectedGame = GameChoice.Greed;
     }
 
     public void Draw()
@@ -48,9 +49,10 @@ public class MainMenu
         int cw = Raylib.MeasureText(sub, 22);
         Raylib.DrawText(sub, (W - cw) / 2, 248, 22, new Color(160, 160, 160, 255));
 
-        DrawMenuButton(SlotsButtonRect(),     "SLOT MACHINE", new Color(30, 100, 30, 255));
-        DrawMenuButton(BlackjackButtonRect(), "BLACKJACK",    new Color(80, 20,  20, 255));
-        DrawMenuButton(RouletteButtonRect(),  "ROULETTE",     new Color(20, 40, 110, 255));
+        DrawMenuButton(SlotsButtonRect(),     "SLOT MACHINE", new Color(30, 100, 30,  255));
+        DrawMenuButton(BlackjackButtonRect(), "BLACKJACK",    new Color(80, 20,  20,  255));
+        DrawMenuButton(RouletteButtonRect(),  "ROULETTE",     new Color(20, 40,  110, 255));
+        DrawMenuButton(GreedButtonRect(),     "GREED",        new Color(130, 90, 10,  255));
 
         const string hint = "F11: volledig scherm";
         int hw = Raylib.MeasureText(hint, 12);
@@ -75,9 +77,10 @@ public class MainMenu
             24, fg);
     }
 
-    private static Rectangle SlotsButtonRect()     => new Rectangle((W - 300) / 2f, 295, 300, 55);
-    private static Rectangle BlackjackButtonRect() => new Rectangle((W - 300) / 2f, 360, 300, 55);
-    private static Rectangle RouletteButtonRect()  => new Rectangle((W - 300) / 2f, 425, 300, 55);
+    private static Rectangle SlotsButtonRect()     => new Rectangle((W - 300) / 2f, 270, 300, 52);
+    private static Rectangle BlackjackButtonRect() => new Rectangle((W - 300) / 2f, 332, 300, 52);
+    private static Rectangle RouletteButtonRect()  => new Rectangle((W - 300) / 2f, 394, 300, 52);
+    private static Rectangle GreedButtonRect()     => new Rectangle((W - 300) / 2f, 456, 300, 52);
 
     private Vector2 CanvasMouse()
     {

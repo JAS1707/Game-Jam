@@ -1,3 +1,3 @@
 namespace Game_Jam;
 
-public enum GameChoice { None, Slots, Blackjack, Roulette }
+public enum GameChoice { None, Slots, Blackjack, Roulette, Greed }

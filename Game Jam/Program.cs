@@ -9,6 +9,7 @@ var menu         = new MainMenu(globalState);
 SlotMachineGame? slotGame      = null;
 BlackjackGame?   bjGame        = null;
 RouletteGame?    rouletteGame  = null;
+GreedGame?       greedGame     = null;
 GameChoice       active        = GameChoice.None;
 
 Raylib.SetConfigFlags(ConfigFlags.ResizableWindow);
@@ -53,6 +54,13 @@ while (!Raylib.WindowShouldClose())
             rouletteGame.SetDrawParams(ox, oy, sc);
             active = GameChoice.Roulette;
         }
+        else if (menu.SelectedGame == GameChoice.Greed)
+        {
+            greedGame ??= new GreedGame(globalState);
+            greedGame.Reset();
+            greedGame.SetDrawParams(ox, oy, sc);
+            active = GameChoice.Greed;
+        }
     }
     else if (active == GameChoice.Slots)
     {
@@ -72,6 +80,12 @@ while (!Raylib.WindowShouldClose())
         rouletteGame.Update();
         if (rouletteGame.WantsToGoBack) active = GameChoice.None;
     }
+    else if (active == GameChoice.Greed)
+    {
+        greedGame!.SetDrawParams(ox, oy, sc);
+        greedGame.Update();
+        if (greedGame.WantsToGoBack) active = GameChoice.None;
+    }
 
     Raylib.BeginTextureMode(canvas);
     Raylib.ClearBackground(new Color(18, 18, 35, 255));
@@ -79,6 +93,7 @@ while (!Raylib.WindowShouldClose())
     else if (active == GameChoice.Slots)     slotGame!.Draw();
     else if (active == GameChoice.Blackjack) bjGame!.Draw();
     else if (active == GameChoice.Roulette)  rouletteGame!.Draw();
+    else if (active == GameChoice.Greed)     greedGame!.Draw();
     Raylib.EndTextureMode();
 
     Raylib.BeginDrawing();
