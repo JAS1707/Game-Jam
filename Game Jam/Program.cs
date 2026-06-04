@@ -9,6 +9,7 @@ var menu         = new MainMenu(globalState);
 SlotMachineGame? slotGame      = null;
 BlackjackGame?   bjGame        = null;
 RouletteGame?    rouletteGame  = null;
+HorseRacingGame? horseGame     = null;
 GameChoice       active        = GameChoice.None;
 
 Raylib.SetConfigFlags(ConfigFlags.ResizableWindow);
@@ -53,6 +54,13 @@ while (!Raylib.WindowShouldClose())
             rouletteGame.SetDrawParams(ox, oy, sc);
             active = GameChoice.Roulette;
         }
+        else if (menu.SelectedGame == GameChoice.HorseRacing)
+        {
+            horseGame ??= new HorseRacingGame(globalState);
+            horseGame.Reset();
+            horseGame.SetDrawParams(ox, oy, sc);
+            active = GameChoice.HorseRacing;
+        }
     }
     else if (active == GameChoice.Slots)
     {
@@ -72,6 +80,12 @@ while (!Raylib.WindowShouldClose())
         rouletteGame.Update();
         if (rouletteGame.WantsToGoBack) active = GameChoice.None;
     }
+    else if (active == GameChoice.HorseRacing)
+    {
+        horseGame!.SetDrawParams(ox, oy, sc);
+        horseGame.Update();
+        if (horseGame.WantsToGoBack) active = GameChoice.None;
+    }
 
     Raylib.BeginTextureMode(canvas);
     Raylib.ClearBackground(new Color(18, 18, 35, 255));
@@ -79,6 +93,7 @@ while (!Raylib.WindowShouldClose())
     else if (active == GameChoice.Slots)     slotGame!.Draw();
     else if (active == GameChoice.Blackjack) bjGame!.Draw();
     else if (active == GameChoice.Roulette)  rouletteGame!.Draw();
+    else if (active == GameChoice.HorseRacing) horseGame!.Draw();
     Raylib.EndTextureMode();
 
     Raylib.BeginDrawing();
