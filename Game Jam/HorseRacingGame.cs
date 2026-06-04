@@ -215,8 +215,7 @@ public class HorseRacingGame
         for (int i = 0; i < HorseCount; i++)
         {
             _positions[i] = 0f;
-            float weightBias = (20f - _horses[i].Weight) * 0.7f;
-            _baseSpeeds[i] = 18f + weightBias + Random.Shared.NextSingle() * 5f;
+            _baseSpeeds[i] = 18f + _horses[i].Performance * 0.35f + Random.Shared.NextSingle() * 7f;
             _speedPhases[i] = Random.Shared.NextSingle() * MathF.PI * 2f;
             _speeds[i] = _baseSpeeds[i];
         }
@@ -236,9 +235,9 @@ public class HorseRacingGame
                 continue;
             }
 
-            float pace = MathF.Sin((float)Raylib.GetTime() * 1.7f + _speedPhases[i]) * 4f;
-            float burst = (Random.Shared.NextSingle() - 0.5f) * 2f;
-            _speeds[i] = MathF.Max(16f, _baseSpeeds[i] + pace + burst);
+            float pace = MathF.Sin((float)Raylib.GetTime() * 2.2f + _speedPhases[i]) * 6f;
+            float burst = (Random.Shared.NextSingle() - 0.5f) * 8f;
+            _speeds[i] = MathF.Max(12f, _baseSpeeds[i] + pace + burst);
             _positions[i] += _speeds[i] * dt;
             if (_positions[i] >= finishX)
             {
@@ -306,9 +305,8 @@ public class HorseRacingGame
 
         foreach (var horse in _horses)
         {
-            float oddBase = 1.8f + Random.Shared.NextSingle() * 5.5f;
-            float weightBias = (20f - horse.Weight) * 0.1f;
-            horse.Odds = MathF.Round(MathF.Max(1.8f, oddBase + weightBias), 1);
+            horse.Performance = 6f + Random.Shared.NextSingle() * 6f;
+            horse.Odds = MathF.Round(MathF.Max(1.8f, 9.5f - horse.Performance * 0.8f + Random.Shared.NextSingle() * 1.4f), 1);
         }
     }
 
@@ -504,6 +502,7 @@ public class HorseRacingGame
         public string Name { get; }
         public Color Color { get; }
         public float Weight { get; }
+        public float Performance { get; set; }
         public float Odds { get; set; }
 
         public Horse(string name, Color color, float weight)
@@ -511,6 +510,7 @@ public class HorseRacingGame
             Name = name;
             Color = color;
             Weight = weight;
+            Performance = 1f;
             Odds = 1f;
         }
     }
