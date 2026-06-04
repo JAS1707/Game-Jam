@@ -205,6 +205,7 @@ public class HorseRacingGame
         _raceFinished = false;
         _finishOrder.Clear();
         for (int i = 0; i < HorseCount; i++) _positions[i] = 0f;
+        BuildHorses();
         SetStatus("Kies een paard, kies een inzet en klik RACE.", StatusKind.Neutral);
     }
 
@@ -214,7 +215,8 @@ public class HorseRacingGame
         for (int i = 0; i < HorseCount; i++)
         {
             _positions[i] = 0f;
-            _baseSpeeds[i] = 55f + _horses[i].Weight * 2f + Random.Shared.NextSingle() * 8f;
+            float weightBias = (20f - _horses[i].Weight) * 0.7f;
+            _baseSpeeds[i] = 18f + weightBias + Random.Shared.NextSingle() * 5f;
             _speedPhases[i] = Random.Shared.NextSingle() * MathF.PI * 2f;
             _speeds[i] = _baseSpeeds[i];
         }
@@ -234,11 +236,9 @@ public class HorseRacingGame
                 continue;
             }
 
-            float time = (float)Raylib.GetTime();
-            float pace = MathF.Sin(time * 2.5f + _speedPhases[i]) * 14f;
-            float burst = (Random.Shared.NextSingle() - 0.5f) * 5f;
-            _speeds[i] = MathF.Max(40f, _baseSpeeds[i] + pace + burst);
-
+            float pace = MathF.Sin((float)Raylib.GetTime() * 1.7f + _speedPhases[i]) * 4f;
+            float burst = (Random.Shared.NextSingle() - 0.5f) * 2f;
+            _speeds[i] = MathF.Max(16f, _baseSpeeds[i] + pace + burst);
             _positions[i] += _speeds[i] * dt;
             if (_positions[i] >= finishX)
             {
@@ -304,10 +304,11 @@ public class HorseRacingGame
         _horses.Add(new Horse("Storm",  new Color(140, 50, 215, 255), 22f));
         _horses.Add(new Horse("Venus",  new Color(240, 110, 40, 255), 12f));
 
-        float total = _horses.Sum(h => h.Weight);
         foreach (var horse in _horses)
         {
-            horse.Odds = MathF.Max(1.8f, total / horse.Weight);
+            float oddBase = 1.8f + Random.Shared.NextSingle() * 5.5f;
+            float weightBias = (20f - horse.Weight) * 0.1f;
+            horse.Odds = MathF.Round(MathF.Max(1.8f, oddBase + weightBias), 1);
         }
     }
 
@@ -352,11 +353,9 @@ public class HorseRacingGame
 
             var horse = _horses[i];
             float horseX = TrackX + 14 + _positions[i];
-            bool moving = _raceStarted && _positions[i] < TrackW - 120f;
-            DrawHorseSprite(horseX, y + 8, TrackH - 16, horse.Color, moving);
+            DrawHorseSprite(horseX, y + 8, TrackH - 16, horse.Color);
             string label = $"{horse.Name} ({horse.Odds:0.0})";
-            int lw = Raylib.MeasureText(label, 16);
-            Raylib.DrawText(label, (int)(TrackX + 8), (int)(y + 10), 16, Color.White);
+            Raylib.DrawText(label, (int)(TrackX - 90f), (int)(y + 10), 16, Color.White);
 
             if (_selectedHorse == i)
             {
@@ -370,68 +369,13 @@ public class HorseRacingGame
         }
     }
 
-    private void DrawHorseSprite(float x, float y, float height, Color color, bool moving)
+    private void DrawHorseSprite(float x, float y, float height, Color color)
     {
-        float time = (float)Raylib.GetTime();
-        float bob = moving ? MathF.Sin(time * 4.2f + x * 0.08f) * 3.5f : 0f;
-        float step = moving ? MathF.Sin(time * 8.5f + x * 0.15f) * 3.2f : 0f;
-        float headTilt = moving ? MathF.Sin(time * 5.2f + x * 0.12f) * 1.8f : 0f;
-        float baseY = y + bob;
-        float bodyW = 78f;
-        float bodyH = MathF.Max(18f, height * 0.48f);
-        float legH = MathF.Max(10f, height * 0.38f);
-        float legW = 7f;
-        float headR = MathF.Max(10f, height * 0.30f);
-        float bodyY = baseY + (height - bodyH - legH) * 0.6f;
-        float legY = bodyY + bodyH - 4f;
-        float neckX = x + bodyW * 0.56f;
-        float neckY = bodyY + bodyH * 0.14f;
-        float headX = neckX + headR * 1.05f;
-        float headY = neckY - headR * 0.2f + headTilt;
-        Color shade = Darken(color, 40);
-        Color shadow = Darken(color, 70);
-
-        Raylib.DrawRectangle((int)(x + 16f), (int)bodyY, (int)(bodyW * 0.72f), (int)bodyH, color);
-        Raylib.DrawEllipse((int)(x + bodyW * 0.47f), (int)(bodyY + bodyH * 0.64f), (int)(bodyW * 0.43f), (int)(bodyH * 0.7f), color);
-        Raylib.DrawTriangle(
-            new Vector2(neckX, neckY),
-            new Vector2(neckX + 20f, neckY - 16f),
-            new Vector2(neckX + 20f, neckY + 16f),
-            color);
-        Raylib.DrawCircle((int)headX, (int)headY, (int)headR, color);
-        Raylib.DrawCircle((int)(headX + headR * 0.25f), (int)(headY - headR * 0.12f), (int)(headR * 0.2f), Color.Black);
-        Raylib.DrawLine((int)(headX + headR * 0.8f), (int)headY, (int)(headX + headR * 1.08f), (int)(headY + headR * 0.08f), shadow);
-
-        Raylib.DrawTriangle(
-            new Vector2(x + 8f, bodyY + bodyH * 0.25f),
-            new Vector2(x - 4f, bodyY + bodyH * 0.18f),
-            new Vector2(x + 12f, bodyY + bodyH * 0.62f),
-            shade);
-        Raylib.DrawTriangle(
-            new Vector2(x + 10f, bodyY + bodyH * 0.22f),
-            new Vector2(x + 2f, bodyY + bodyH * 0.18f),
-            new Vector2(x + 12f, bodyY + bodyH * 0.52f),
-            Darken(shade, 20));
-
-        Raylib.DrawTriangle(
-            new Vector2(x + 6f, bodyY + bodyH * 0.14f),
-            new Vector2(x - 10f, bodyY + bodyH * 0.06f),
-            new Vector2(x + 6f, bodyY + bodyH * 0.45f),
-            Darken(color, 55));
-
-        Raylib.DrawRectangle((int)(x + 18f), (int)(legY + step), (int)legW, (int)legH, color);
-        Raylib.DrawRectangle((int)(x + 32f), (int)(legY - step * 0.4f), (int)legW, (int)(legH * 0.92f), color);
-        Raylib.DrawRectangle((int)(x + 48f), (int)(legY - step * 0.3f), (int)legW, (int)(legH * 0.94f), color);
-        Raylib.DrawRectangle((int)(x + 62f), (int)(legY + step * 0.8f), (int)legW, (int)(legH * 0.88f), color);
-
-        Raylib.DrawRectangle((int)(x + 16f), (int)(legY + step + legH - 4f), (int)(legW + 2f), 4, shadow);
-        Raylib.DrawRectangle((int)(x + 30f), (int)(legY - step * 0.4f + legH - 4f), (int)(legW + 2f), 4, shadow);
-        Raylib.DrawRectangle((int)(x + 46f), (int)(legY - step * 0.3f + legH - 4f), (int)(legW + 2f), 4, shadow);
-        Raylib.DrawRectangle((int)(x + 60f), (int)(legY + step * 0.8f + legH - 4f), (int)(legW + 2f), 4, shadow);
-
-        Raylib.DrawLine((int)(neckX - 2f), (int)(neckY + 2f), (int)(neckX + 14f), (int)(neckY - 20f), shadow);
-        Raylib.DrawLine((int)(neckX + 4f), (int)(neckY), (int)(neckX + 18f), (int)(neckY - 16f), Color.Black);
-        Raylib.DrawLine((int)(neckX + 4f), (int)(neckY + 6f), (int)(neckX + 16f), (int)(neckY - 10f), Color.Black);
+        float size = MathF.Min(height, 40f);
+        float squareY = y + (height - size) * 0.5f;
+        Rectangle square = new Rectangle(x, squareY, size, size);
+        Raylib.DrawRectangleRec(square, color);
+        Raylib.DrawRectangleLinesEx(square, 2, Color.Black);
     }
 
     private void DrawBetSection()
@@ -482,16 +426,23 @@ public class HorseRacingGame
 
     private void DrawResultOverlay()
     {
+        float overlayX = 160f;
+        float overlayY = 130f;
+        float overlayW = 480f;
+        float overlayH = 280f;
+        Raylib.DrawRectangle((int)overlayX, (int)overlayY, (int)overlayW, (int)overlayH, new Color(10, 10, 10, 220));
+        Raylib.DrawRectangleLinesEx(new Rectangle(overlayX, overlayY, overlayW, overlayH), 3, Color.Gold);
+
         string title = "RESULTAAT";
         int tw = Raylib.MeasureText(title, 48);
-        Raylib.DrawText(title, (W - tw) / 2, 150, 48, Color.Gold);
+        Raylib.DrawText(title, (int)((W - tw) / 2), (int)(overlayY + 20), 48, Color.Gold);
 
         for (int rank = 0; rank < HorseCount; rank++)
         {
             int idx = _finishOrder[rank];
             var horse = _horses[idx];
             string line = $"{rank + 1}. {horse.Name} ({horse.Odds:0.0})";
-            Raylib.DrawText(line, 240, 220 + rank * 28, 22, Color.White);
+            Raylib.DrawText(line, 240, (int)(overlayY + 100 + rank * 28), 22, Color.White);
         }
 
         DrawButton(NewRaceButtonRect(), "NIEUWE RACE", true, new Color(30, 100, 30, 255));
