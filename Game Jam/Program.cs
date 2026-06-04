@@ -11,6 +11,8 @@ BlackjackGame?   bjGame        = null;
 RouletteGame?    rouletteGame  = null;
 HorseRacingGame? horseGame     = null;
 GameChoice       active        = GameChoice.None;
+bool             gameOver      = false;
+int              prevBalance   = GlobalState.StartingBalance;
 
 Raylib.SetConfigFlags(ConfigFlags.ResizableWindow);
 Raylib.InitWindow(W, H, "Game Jam");
@@ -28,7 +30,21 @@ while (!Raylib.WindowShouldClose())
 
     if (Raylib.IsKeyPressed(KeyboardKey.F11)) ToggleFullscreen(W, H);
 
-    if (active == GameChoice.None)
+    if (globalState.Balance <= 0 && prevBalance > 0 && active != GameChoice.None)
+    {
+        gameOver = true;
+    }
+    prevBalance = globalState.Balance;
+
+    if (gameOver)
+    {
+        if (Raylib.IsMouseButtonPressed(MouseButton.Left))
+        {
+            gameOver = false;
+            active = GameChoice.None;
+        }
+    }
+    else if (active == GameChoice.None)
     {
         menu.SetDrawParams(ox, oy, sc);
         menu.Update();
@@ -94,6 +110,23 @@ while (!Raylib.WindowShouldClose())
     else if (active == GameChoice.Blackjack) bjGame!.Draw();
     else if (active == GameChoice.Roulette)  rouletteGame!.Draw();
     else if (active == GameChoice.HorseRacing) horseGame!.Draw();
+
+    if (gameOver)
+    {
+        Raylib.DrawRectangle(0, 0, W, H, new Color(0, 0, 0, 220));
+        string title = "GAME OVER";
+        int tw = Raylib.MeasureText(title, 64);
+        Raylib.DrawText(title, (W - tw) / 2, 150, 64, Color.Red);
+
+        string msg = "Je hebt alles verloren!";
+        int mw = Raylib.MeasureText(msg, 24);
+        Raylib.DrawText(msg, (W - mw) / 2, 280, 24, Color.White);
+
+        string btn = "KLIK TERUG NAAR MENU";
+        int bw = Raylib.MeasureText(btn, 20);
+        Raylib.DrawText(btn, (W - bw) / 2, 400, 20, new Color(200, 200, 200, 255));
+    }
+
     Raylib.EndTextureMode();
 
     Raylib.BeginDrawing();

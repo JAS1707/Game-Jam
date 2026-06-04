@@ -68,7 +68,6 @@ public class HorseRacingGame
 
     public void Reset()
     {
-        if (_state.Balance <= 0) _state.Balance = GlobalState.StartingBalance;
         _betChips.Clear();
         _betAmount      = 0;
         _selectedChip   = 1;
@@ -215,7 +214,7 @@ public class HorseRacingGame
         for (int i = 0; i < HorseCount; i++)
         {
             _positions[i] = 0f;
-            _baseSpeeds[i] = 18f + _horses[i].Performance * 0.35f + Random.Shared.NextSingle() * 7f;
+            _baseSpeeds[i] = 24f + _horses[i].Performance * 0.35f + Random.Shared.NextSingle() * 7f;
             _speedPhases[i] = Random.Shared.NextSingle() * MathF.PI * 2f;
             _speeds[i] = _baseSpeeds[i];
         }
@@ -237,7 +236,7 @@ public class HorseRacingGame
 
             float pace = MathF.Sin((float)Raylib.GetTime() * 2.2f + _speedPhases[i]) * 6f;
             float burst = (Random.Shared.NextSingle() - 0.5f) * 8f;
-            _speeds[i] = MathF.Max(12f, _baseSpeeds[i] + pace + burst);
+            _speeds[i] = MathF.Max(18f, _baseSpeeds[i] + pace + burst);
             _positions[i] += _speeds[i] * dt;
             if (_positions[i] >= finishX)
             {
