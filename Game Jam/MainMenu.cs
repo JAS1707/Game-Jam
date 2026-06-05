@@ -28,10 +28,11 @@ public class MainMenu
         SelectedGame = GameChoice.None;
         if (!Raylib.IsMouseButtonPressed(MouseButton.Left)) return;
         Vector2 m = CanvasMouse();
-        if (Hit(m, SlotsButtonRect()))     SelectedGame = GameChoice.Slots;
-        if (Hit(m, BlackjackButtonRect())) SelectedGame = GameChoice.Blackjack;
-        if (Hit(m, RouletteButtonRect()))  SelectedGame = GameChoice.Roulette;
-        if (Hit(m, GreedButtonRect()))     SelectedGame = GameChoice.Greed;
+        if (Hit(m, SlotsButtonRect()))       SelectedGame = GameChoice.Slots;
+        if (Hit(m, BlackjackButtonRect()))   SelectedGame = GameChoice.Blackjack;
+        if (Hit(m, RouletteButtonRect()))    SelectedGame = GameChoice.Roulette;
+        if (Hit(m, HorseRacingButtonRect())) SelectedGame = GameChoice.HorseRacing;
+        if (Hit(m, GreedButtonRect()))        SelectedGame = GameChoice.Greed;
     }
 
     public void Draw()
@@ -52,11 +53,11 @@ public class MainMenu
         int sw = Raylib.MeasureText(sub, 18);
         Raylib.DrawText(sub, (W - sw) / 2, 212, 18, AppTheme.TextSecondary);
 
-        // ── Spelknoppen — 4 stuks, gelijkmatig gespreid ───────────────────────
-        DrawMenuButton(SlotsButtonRect(),     "🎰  SLOT MACHINE", new Color(28,  95, 28,  255));
-        DrawMenuButton(BlackjackButtonRect(), "♠   BLACKJACK",    new Color(75,  18, 18,  255));
-        DrawMenuButton(RouletteButtonRect(),  "⚫  ROULETTE",     new Color(18,  38, 105, 255));
-        DrawMenuButton(GreedButtonRect(),     "💣  GREED",        new Color(120, 82,  8,  255));
+        DrawMenuButton(SlotsButtonRect(),       "SLOT MACHINE",   new Color(30, 100, 30, 255));
+        DrawMenuButton(BlackjackButtonRect(),   "BLACKJACK",      new Color(80, 20,  20, 255));
+        DrawMenuButton(RouletteButtonRect(),    "ROULETTE",       new Color(20, 40, 110, 255));
+        DrawMenuButton(HorseRacingButtonRect(), "HORSE RACING",   new Color(110, 60, 10, 255));
+        DrawMenuButton(GreedButtonRect(),       "GREED",          new Color(120, 82,  8,  255));
 
         // ── Hints onderaan ────────────────────────────────────────────────────
         const string hint = "F11: volledig scherm  |  Esc: menu";
@@ -83,11 +84,11 @@ public class MainMenu
             22, fg);
     }
 
-    // ── Knop-rechthoeken: 300 × 52 px, gecentreerd, 12 px tussenruimte ────────
-    private static Rectangle SlotsButtonRect()     => new Rectangle((W - 300) / 2f, 244, 300, 52);
-    private static Rectangle BlackjackButtonRect() => new Rectangle((W - 300) / 2f, 308, 300, 52);
-    private static Rectangle RouletteButtonRect()  => new Rectangle((W - 300) / 2f, 372, 300, 52);
-    private static Rectangle GreedButtonRect()     => new Rectangle((W - 300) / 2f, 436, 300, 52);
+    private static Rectangle SlotsButtonRect()       => new Rectangle((W - 300) / 2f, 250, 300, 55);
+    private static Rectangle BlackjackButtonRect()   => new Rectangle((W - 300) / 2f, 315, 300, 55);
+    private static Rectangle RouletteButtonRect()    => new Rectangle((W - 300) / 2f, 380, 300, 55);
+    private static Rectangle HorseRacingButtonRect() => new Rectangle((W - 300) / 2f, 445, 300, 55);
+    private static Rectangle GreedButtonRect()        => new Rectangle((W - 300) / 2f, 510, 300, 55);
 
     private Vector2 CanvasMouse()
     {

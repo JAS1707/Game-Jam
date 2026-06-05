@@ -88,9 +88,6 @@ public class SlotMachineGame
 
     public void Reset()
     {
-        if (_state.Balance <= 0)
-            _state.Balance = GlobalState.StartingBalance;
-
         _betChips.Clear();
         _gameOver     = false;
         _spinning     = false;
