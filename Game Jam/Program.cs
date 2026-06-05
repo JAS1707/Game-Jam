@@ -12,7 +12,6 @@ RouletteGame?    rouletteGame  = null;
 HorseRacingGame? horseGame     = null;
 GameChoice       active        = GameChoice.None;
 bool             gameOver      = false;
-int              prevBalance   = GlobalState.StartingBalance;
 
 Raylib.SetConfigFlags(ConfigFlags.ResizableWindow);
 Raylib.InitWindow(W, H, "Game Jam");
@@ -29,12 +28,6 @@ while (!Raylib.WindowShouldClose())
     int ox   = (sw - dw) / 2,  oy = (sh - dh) / 2;
 
     if (Raylib.IsKeyPressed(KeyboardKey.F11)) ToggleFullscreen(W, H);
-
-    if (globalState.Balance <= 0 && prevBalance > 0 && active != GameChoice.None)
-    {
-        gameOver = true;
-    }
-    prevBalance = globalState.Balance;
 
     if (gameOver)
     {
